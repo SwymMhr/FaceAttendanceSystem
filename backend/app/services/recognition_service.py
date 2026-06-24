@@ -11,8 +11,8 @@ from app.services.model_service import (
     get_embedding,
     str_to_embedding,
     cosine_similarity,
+    VERIFICATION_THRESHOLD,
 )
-from app.core.config import settings
 from PIL import Image
 
 
@@ -23,7 +23,8 @@ def identify_face(pil_image: Image.Image, db: Session):
       2. Compare against every stored embedding in the database.
       3. Return (Student | None, best_score, student_id_int | None).
 
-    If the best score is below RECOGNITION_THRESHOLD, the face is 'Unknown'.
+    If the best score is below VERIFICATION_THRESHOLD (computed during
+    training, not a hand-picked guess), the face is 'Unknown'.
     """
     # Step 1 — compute embedding for the incoming face
     query_vec = get_embedding(pil_image)
@@ -49,7 +50,7 @@ def identify_face(pil_image: Image.Image, db: Session):
             best_student       = emb_row.student
 
     # Step 4 — apply threshold
-    if best_score < settings.RECOGNITION_THRESHOLD:
+    if best_score < VERIFICATION_THRESHOLD:
         return None, best_score, None
 
     # Step 5 — fetch the Student row

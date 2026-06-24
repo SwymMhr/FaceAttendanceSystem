@@ -14,51 +14,70 @@ from PIL import Image
 from app.core.config import settings
 
 
-# ── 1. Rebuild the EXACT same model class you used in Colab ──────────────────
-#    This must match your notebook 1-to-1 so the saved weights load correctly.
+# ── 1. Rebuild the EXACT same model class used in training ───────────────────
+#    This must match the notebook's FaceEmbeddingModel 1-to-1 so the saved
+#    weights load correctly. This is the MobileNetV2 + ArcFace model
+#    (v6), not the old simpler test model.
 
 class FaceModel(nn.Module):
-    def __init__(self, base):
+    def __init__(self, embedding_dim: int = 128):
         super().__init__()
-        self.base = base
-        self.fc = nn.Sequential(
-            nn.Linear(1280, 256),
+        backbone = models.mobilenet_v2(weights=None)
+        backbone.classifier = nn.Identity()
+        self.backbone = backbone
+        self.embedding = nn.Sequential(
+            nn.Linear(1280, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Linear(256, 128)
+            nn.Dropout(0.3),
+            nn.Linear(512, embedding_dim),
         )
 
     def forward(self, x):
-        x = self.base(x)
-        x = self.fc(x)
-        return F.normalize(x, dim=1)   # L2-normalised 128-dim vector
+        x = self.backbone(x)
+        x = self.embedding(x)
+        return F.normalize(x, p=2, dim=1)   # L2-normalised embedding
 
 
-# ── 2. Preprocessing transform (same as training) ────────────────────────────
-#    Your notebook used Resize(160,160) + ToTensor() — no normalisation.
-
-_transform = transforms.Compose([
-    transforms.Resize((160, 160)),
-    transforms.ToTensor(),
-])
-
-
-# ── 3. Load the model ONCE when the server starts ────────────────────────────
+# ── 2. Load the checkpoint ONCE when the server starts ───────────────────────
 #    Loading is slow (~1-2 s); we do it at import time so every API request
 #    reuses the already-loaded model.
+#
+#    The new checkpoint is a dict (not a raw state_dict) that also carries
+#    the preprocessing config and the verification threshold computed during
+#    training, so the backend doesn't have to guess those values separately.
 
-def _load_model() -> FaceModel:
-    base = models.mobilenet_v2(weights=None)   # no pretrained weights
-    base.classifier = nn.Identity()
+def _load_checkpoint():
+    checkpoint = torch.load(settings.MODEL_PATH, map_location="cpu")
 
-    model = FaceModel(base)
-    model.load_state_dict(
-        torch.load(settings.MODEL_PATH, map_location="cpu")
-    )
+    model = FaceModel(embedding_dim=checkpoint["embedding_dim"])
+    model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()   # switch to inference mode (disables dropout etc.)
-    print(f"[ModelService] Model loaded from {settings.MODEL_PATH}")
-    return model
 
-_model: FaceModel = _load_model()    # module-level singleton
+    print(f"[ModelService] Model loaded from {settings.MODEL_PATH}")
+    print(f"[ModelService] embedding_dim={checkpoint['embedding_dim']}  "
+          f"img_size={checkpoint['img_size']}  "
+          f"verification_threshold={checkpoint['verification_threshold']:.4f}")
+
+    return model, checkpoint
+
+
+_model, _checkpoint = _load_checkpoint()    # module-level singletons
+
+IMG_SIZE = _checkpoint["img_size"]
+VERIFICATION_THRESHOLD = float(_checkpoint["verification_threshold"])
+_NORMALIZE_MEAN = _checkpoint["normalize_mean"]
+_NORMALIZE_STD = _checkpoint["normalize_std"]
+
+# ── 3. Preprocessing transform (must match training exactly) ─────────────────
+#    The new model was trained at 224x224 WITH ImageNet normalisation —
+#    different from the old model's 160x160 / no-normalisation pipeline.
+
+_transform = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=_NORMALIZE_MEAN, std=_NORMALIZE_STD),
+])
 
 
 # ── 4. Public API ─────────────────────────────────────────────────────────────
@@ -68,10 +87,10 @@ def get_embedding(pil_image: Image.Image) -> np.ndarray:
     Given a PIL Image (RGB), return a 128-dim L2-normalised embedding
     as a numpy float32 array.
     """
-    tensor = _transform(pil_image.convert("RGB")).unsqueeze(0)  # shape: [1, 3, 160, 160]
+    tensor = _transform(pil_image.convert("RGB")).unsqueeze(0)  # [1, 3, IMG_SIZE, IMG_SIZE]
     with torch.no_grad():
-        emb = _model(tensor)                                     # shape: [1, 128]
-    return emb.squeeze(0).numpy()                                # shape: [128]
+        emb = _model(tensor)                                     # [1, 128]
+    return emb.squeeze(0).numpy().astype(np.float32)              # [128]
 
 
 def embedding_to_str(vector: np.ndarray) -> str:

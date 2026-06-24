@@ -9,6 +9,11 @@ from fastapi import APIRouter, File, Form, UploadFile, Depends, HTTPException
 from sqlalchemy.orm import Session
 from PIL import Image
 
+import cv2
+import numpy as np
+from app.services.yolo_service import detect_faces
+from app.services.crop_utils import crop_with_margin
+
 from app.db.database import get_db
 from app.models.db_models import Student, Embedding
 from app.services.model_service import get_embedding, embedding_to_str
@@ -69,8 +74,19 @@ async def enroll_student(
         # 3. Generate the 128-dim embedding using your PyTorch model
         from io import BytesIO
         pil_image = Image.open(BytesIO(raw_bytes)).convert("RGB")
-        vector    = get_embedding(pil_image)          # numpy [128]
-        vec_str   = embedding_to_str(vector)           # "0.12,0.45,..."
+
+        frame = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+        faces = detect_faces(frame)
+
+        if not faces:
+            continue  # no face found in this enrollment photo — skip it, don't poison the gallery
+
+        x1, y1, x2, y2 = max(faces, key=lambda b: (b[2]-b[0]) * (b[3]-b[1]))  # largest box if multiple
+        face_crop = crop_with_margin(frame, (x1, y1, x2, y2))
+        face_pil  = Image.fromarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
+
+        vector  = get_embedding(face_pil)
+        vec_str = embedding_to_str(vector)
 
         # 4. Store embedding in DB
         emb = Embedding(

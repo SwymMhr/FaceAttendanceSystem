@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 from PIL import Image
 from io import BytesIO
+from app.services.crop_utils import crop_with_margin
 
 from app.db.database import get_db
 from app.services.yolo_service import detect_faces
@@ -30,7 +31,7 @@ async def process_frame(
 
     for (x1, y1, x2, y2) in faces:
 
-        face_crop = frame[y1:y2, x1:x2]
+        face_crop = crop_with_margin(frame, (x1, y1, x2, y2))
 
         pil_img = Image.fromarray(
             cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)

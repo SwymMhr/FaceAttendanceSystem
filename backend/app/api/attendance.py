@@ -11,6 +11,10 @@ from PIL import Image
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 
+import cv2
+import numpy as np
+from app.services.yolo_service import detect_faces
+from app.services.crop_utils import crop_with_margin
 from app.db.database import get_db
 from app.models.db_models import Attendance, Student
 from app.services.recognition_service import identify_face
@@ -25,16 +29,25 @@ async def recognize_face(
     image: UploadFile = File(...),
     db:    Session    = Depends(get_db),
 ):
-    """
-    Accept a cropped face image, run recognition, return the matched student.
-
-    This is called by the React frontend every ~1 second with a frame
-    from the webcam (after YOLO crops out the face region).
-    """
     raw = await image.read()
     pil = Image.open(BytesIO(raw)).convert("RGB")
 
-    student, score, _ = identify_face(pil, db)
+    frame = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
+    faces = detect_faces(frame)
+
+    if not faces:
+        return {
+            "recognized": False,
+            "name": "Unknown",
+            "student_id": None,
+            "confidence": 0.0,
+        }
+
+    x1, y1, x2, y2 = max(faces, key=lambda b: (b[2]-b[0]) * (b[3]-b[1]))
+    face_crop = crop_with_margin(frame, (x1, y1, x2, y2))
+    face_pil  = Image.fromarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
+
+    student, score, _ = identify_face(face_pil, db)
 
     if student is None:
         return {

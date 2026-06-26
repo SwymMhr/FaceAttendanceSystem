@@ -5,8 +5,10 @@ export default function EnrollPage() {
   const [name, setName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [images, setImages] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
+    setLoading(true);
     const formData = new FormData();
     formData.append("student_name", name);
     formData.append("student_id", studentId);
@@ -20,6 +22,8 @@ export default function EnrollPage() {
       alert(res.data.message);
     } catch (err) {
       alert("Enrollment failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -52,7 +56,7 @@ export default function EnrollPage() {
               )}
             </div>
 
-            <button className="btn btn-primary" onClick={handleSubmit}>Enroll</button>
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>{loading ? "Enrolling..." : "Enroll"}</button>
 
           </div>
         </div>

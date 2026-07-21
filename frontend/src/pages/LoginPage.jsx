@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { loginUser } from "../api";
 
 export default function LoginPage() {
@@ -16,9 +16,8 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await loginUser(username, password);
-      localStorage.setItem("access_token", res.data.access_token);
-      localStorage.setItem("username", res.data.username);
+      // loginUser() stores token/username/role in localStorage on success.
+      await loginUser(username, password);
       navigate("/");
     } catch (err) {
       setError(err.response?.data?.detail || "Login failed.");
@@ -28,17 +27,11 @@ export default function LoginPage() {
   };
 
   return (
-  <div className="page" style={{
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      minHeight: "100vh",
-    }}
-  >
+    <div className="page">
       <div className="container mt-4">
         <div className="card" style={{ maxWidth: 420, margin: "0 auto" }}>
           <div className="card-body">
-            <h1>Log In</h1>
+            <h1>Sign In</h1>
 
             {error && <div className="alert alert-danger">{error}</div>}
 
@@ -62,14 +55,13 @@ export default function LoginPage() {
               />
 
               <button className="btn btn-primary w-100" type="submit" disabled={loading}>
-                {loading ? "Logging in..." : "Login"}
+                {loading ? "Signing in..." : "Login"}
               </button>
             </form>
-          
+
           </div>
         </div>
       </div>
     </div>
-
   );
 }

@@ -1,23 +1,25 @@
 # app/api/attendance.py
-# Three endpoints:
-#   POST /recognize_face    — identify who is in a face image
-#   POST /mark_attendance   — log an attendance record for a student
-#   GET  /get_attendance_logs — fetch all attendance records
+#   POST /recognize_face      — identify who is in a face image
+#   POST /mark_attendance     — mark attendance via the shared service
+#   GET  /get_attendance_logs — fetch recent attendance records
+#   POST /finalize_period     — backfill absentees for a finished period (teacher/admin)
 
 from fastapi import APIRouter, File, UploadFile, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
 from PIL import Image
 from io import BytesIO
-from datetime import datetime, timedelta, timezone
+from datetime import date as date_type
 
 import cv2
 import numpy as np
 from app.services.yolo_service import detect_faces
 from app.services.crop_utils import crop_with_margin
 from app.db.database import get_db
-from app.models.db_models import Attendance, Student
+from app.models.db_models import Attendance, Student, Period, User
 from app.services.recognition_service import identify_face
+from app.services.attendance_service import mark_attendance_logic
+from app.services.absence_service import finalize_period_absentees
+from app.api.deps import require_role
 
 router = APIRouter()
 
@@ -59,8 +61,8 @@ async def recognize_face(
 
     return {
         "recognized": True,
-        "name":       student.name,
-        "student_id": student.student_id,
+        "name":       student.student_name,
+        "student_id": student.student_code,
         "db_id":      student.id,
         "confidence": round(score, 4),
     }
@@ -70,49 +72,18 @@ async def recognize_face(
 
 @router.post("/mark_attendance")
 def mark_attendance(payload: dict, db: Session = Depends(get_db)):
-
     db_id = payload.get("db_id")
     confidence = payload.get("confidence", 0.0)
 
     if db_id is None:
         raise HTTPException(status_code=400, detail="db_id is required.")
 
-    student = db.query(Student).filter(Student.id == db_id).first()
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found.")
+    result = mark_attendance_logic(db, db_id, confidence)
 
-    # 🚨 NEW: prevent duplicate attendance within 1 day
-    today = datetime.now(timezone.utc) - timedelta(days=1)
+    if result["status"] == "error":
+        raise HTTPException(status_code=404, detail=result["message"])
 
-    recent = db.query(Attendance).filter(
-        and_(
-            Attendance.student_id == student.id,
-            Attendance.timestamp >= today
-        )
-    ).first()
-
-    if recent:
-        return {
-            "message": "Already marked today",
-            "student": student.name,
-            "status": "skipped"
-        }
-
-    record = Attendance(
-        student_id=student.id,
-        confidence=confidence,
-        timestamp=datetime.now(timezone.utc),
-    )
-
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-
-    return {
-        "message": "Attendance marked.",
-        "student": student.name,
-        "timestamp": record.timestamp
-    }
+    return result
 
 
 # ── GET /get_attendance_logs ──────────────────────────────────────────────────
@@ -123,8 +94,8 @@ def get_attendance_logs(
     db: Session = Depends(get_db),
 ):
     """
-    Fetch the most recent attendance records (newest first).
-    Each record includes the student's name and student_id.
+    Fetch the most recent attendance records (newest first), including
+    which subject/period each one was for.
     """
     rows = (
         db.query(Attendance)
@@ -137,10 +108,42 @@ def get_attendance_logs(
     return [
         {
             "id":         r.id,
-            "name":       r.student.name,
-            "student_id": r.student.student_id,
+            "name":       r.student.student_name,
+            "student_id": r.student.student_code,
+            "subject":    r.period.subject.subject_name if r.period else None,
+            "status":     r.status,
+            "date":       r.date.isoformat(),
             "timestamp":  r.timestamp.isoformat(),
-            "confidence": round(r.confidence, 4),
+            "confidence": round(r.confidence, 4) if r.confidence is not None else None,
         }
         for r in rows
     ]
+
+
+# ── POST /finalize_period ─────────────────────────────────────────────────────
+
+@router.post("/finalize_period")
+def finalize_period(
+    period_id: int,
+    target_date: date_type | None = None,
+    current_user: User = Depends(require_role("teacher", "admin")),
+    db: Session = Depends(get_db),
+):
+    """
+    Manually trigger absence backfill + emails for one period. Normally
+    the background scheduler does this automatically once a period ends
+    (see app/services/scheduler.py), but a teacher/admin can also trigger
+    it on demand — e.g. right after class instead of waiting for the
+    next scheduler tick.
+    """
+    period = db.query(Period).filter(Period.id == period_id).first()
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found.")
+
+    if current_user.role == "teacher" and period.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only finalize your own periods.")
+
+    try:
+        return finalize_period_absentees(db, period_id, target_date)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

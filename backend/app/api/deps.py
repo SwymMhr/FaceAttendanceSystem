@@ -3,20 +3,20 @@
 # Use these on any route that needs a logged-in user, or a specific role.
 
 from fastapi import Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.db_models import User
 from app.core.security import decode_access_token
 
-# tokenUrl is just for the interactive /docs page's "Authorize" button;
-# the frontend calls POST /login directly and stores the token itself.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+# HTTPBearer gives Swagger's "Authorize" dialog a single "Value" field —
+# paste the raw access_token from /login's response, nothing else needed.
+bearer_scheme = HTTPBearer()
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
     """
@@ -30,6 +30,7 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    token = credentials.credentials
     payload = decode_access_token(token)
     if payload is None:
         raise credentials_error

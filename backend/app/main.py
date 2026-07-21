@@ -5,7 +5,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import enroll, attendance, realtime, auth
+from app.services.scheduler import start_scheduler
+from app.api import enroll, attendance, realtime, auth, admin, schedule, dashboard
 from app.db.database import Base, engine
 
 # ── Create all tables in PostgreSQL on startup ────────────────────────────────
@@ -19,6 +20,7 @@ app = FastAPI(
     description = "API for student enrollment and live attendance tracking.",
     version     = "1.0.0",
 )
+start_scheduler()
 
 # ── CORS — allow your React frontend to call this backend ─────────────────────
 # React dev server runs on http://localhost:5173 (Vite default).
@@ -36,6 +38,12 @@ app.include_router(auth.router,       tags=["Auth"])
 app.include_router(enroll.router,     tags=["Enrollment"])
 app.include_router(attendance.router, tags=["Attendance"])
 app.include_router(realtime.router, tags=["Realtime"])
+app.include_router(admin.router)
+app.include_router(schedule.router)
+
+app.include_router(dashboard.student_router, tags=["Student Dashboard"])
+app.include_router(dashboard.teacher_router, tags=["Teacher Dashboard"])
+app.include_router(dashboard.admin_dashboard_router, tags=["Admin Dashboard"])
 
 # ── Health check ──────────────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])

@@ -40,10 +40,13 @@ async def process_frame(
         student, score, db_id = identify_face(pil_img, db)
 
         if student:
+            # NOTE (Phase 4): mark_attendance_logic() likely has the same
+            # missing period_id/date gap as /mark_attendance above — check
+            # app/services/attendance_service.py once we get to Phase 4.
             mark_attendance_logic(db, db_id, score)
 
             results.append({
-                "name": student.name,
+                "name": student.student_name,
                 "confidence": score
             })
 

@@ -5,7 +5,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import enroll, attendance, realtime
+from app.api import enroll, attendance, realtime, auth
 from app.db.database import Base, engine
 
 # ── Create all tables in PostgreSQL on startup ────────────────────────────────
@@ -32,6 +32,7 @@ app.add_middleware(
 )
 
 # ── Register routes ───────────────────────────────────────────────────────────
+app.include_router(auth.router,       tags=["Auth"])
 app.include_router(enroll.router,     tags=["Enrollment"])
 app.include_router(attendance.router, tags=["Attendance"])
 app.include_router(realtime.router, tags=["Realtime"])

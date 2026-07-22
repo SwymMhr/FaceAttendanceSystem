@@ -46,3 +46,155 @@ h1, h2, h3, h4 {
 a {
   color: inherit;
 }
+
+/* ── Page shell — every route's content uses this instead of raw
+   bootstrap containers/headings, so pages look consistent with each
+   other and with the sidebar/topbar. ─────────────────────────────────── */
+
+.page {
+  padding: 28px 32px 56px;
+  max-width: 1180px;
+}
+
+@media (max-width: 575.98px) {
+  .page {
+    padding: 20px 16px 40px;
+  }
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.page-subtitle {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.page-header__actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Card-style content block — replaces bare bootstrap .card usage so every
+   panel across the app shares the same border/radius/shadow language. */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 22px 24px;
+  margin-bottom: 24px;
+}
+
+.panel:last-child {
+  margin-bottom: 0;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.panel table {
+  margin-bottom: 0;
+}
+
+/* Tables everywhere, inside or outside a panel */
+.table thead th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+
+.table td,
+.table th {
+  border-color: var(--border);
+  vertical-align: middle;
+}
+
+.empty-state {
+  color: var(--ink-faint);
+  font-size: 14px;
+  text-align: center;
+  padding: 28px 0;
+}
+
+.page-loading {
+  color: var(--ink-soft);
+  font-size: 14px;
+  padding: 40px 0;
+}
+
+/* Small stat cards (dashboards) */
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 18px 20px;
+  min-width: 150px;
+  flex: 1 1 150px;
+}
+
+.stat-card__value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.stat-card__label {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+/* Bring bootstrap's primary buttons/inputs in line with the brand palette */
+.btn-primary {
+  --bs-btn-bg: var(--brand-deep);
+  --bs-btn-border-color: var(--brand-deep);
+  --bs-btn-hover-bg: var(--brand-end);
+  --bs-btn-hover-border-color: var(--brand-end);
+  --bs-btn-active-bg: var(--brand-deep);
+  --bs-btn-active-border-color: var(--brand-deep);
+  --bs-btn-disabled-bg: var(--brand-deep);
+  --bs-btn-disabled-border-color: var(--brand-deep);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--brand-deep);
+  --bs-btn-border-color: var(--brand-deep);
+  --bs-btn-hover-bg: var(--brand-deep);
+  --bs-btn-hover-border-color: var(--brand-deep);
+  --bs-btn-active-bg: var(--brand-deep);
+  --bs-btn-active-border-color: var(--brand-deep);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--brand-end);
+  box-shadow: 0 0 0 0.2rem var(--brand-soft);
+}

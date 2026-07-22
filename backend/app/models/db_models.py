@@ -160,7 +160,11 @@ class Attendance(Base):
     timestamp  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
-        CheckConstraint("status IN ('present','absent')", name="ck_attendance_status"),
+        # 'pending' = a face was auto-recognized by the camera but a teacher
+        # hasn't confirmed it yet. It's never a terminal state on its own —
+        # it always resolves to 'present' or 'absent' via teacher review or
+        # the end-of-day auto-finalize (see absence_service.py).
+        CheckConstraint("status IN ('present','absent','pending')", name="ck_attendance_status"),
         UniqueConstraint("student_id", "period_id", "date", name="uq_attendance_slot"),
     )
 

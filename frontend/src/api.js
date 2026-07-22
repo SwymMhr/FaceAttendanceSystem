@@ -83,6 +83,27 @@ export async function getBatchTrend(batchId, days = 30) {
   return res.data;
 }
 
+// ── Period attendance review + manual override ──────────────────────────────
+// Lists every student in a period's batch with their current status
+// ("pending" = camera-detected, awaiting confirmation; "present"/"absent" =
+// confirmed; "none" = no record yet) and lets a teacher confirm, reject, or
+// force-mark any of them regardless of what the camera saw.
+
+export async function getPeriodAttendance(periodId, date) {
+  const query = date ? `?date=${date}` : "";
+  const res = await api.get(`/teacher/period/${periodId}/attendance${query}`);
+  return res.data;
+}
+
+export async function setPeriodAttendance(periodId, studentId, status, date) {
+  const query = date ? `?date=${date}` : "";
+  const res = await api.post(`/teacher/period/${periodId}/attendance${query}`, {
+    student_id: studentId,
+    status,
+  });
+  return res.data;
+}
+
 export async function finalizePeriod(periodId, targetDate) {
   // POST /finalize_period — manual trigger for the same absence-backfill +
   // email job the background scheduler runs automatically once a period

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getStudentHistory } from "../api";
+import PageHeader from "../components/PageHeader";
 
 export default function StudentHistory() {
   const [logs, setLogs] = useState([]);
@@ -14,45 +15,43 @@ export default function StudentHistory() {
   }, []);
 
   return (
-    <div className="container mt-4">
-      <h1>My Attendance History</h1>
+    <div className="page">
+      <PageHeader title="My Attendance History" />
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : logs.length === 0 ? (
-        <p className="text-muted">No attendance records found.</p>
-      ) : (
-        <div className="card">
-          <div className="table-responsive">
-            <table className="table table-striped table-bordered mb-0">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Subject</th>
-                  <th>Status</th>
-                  <th>Recorded At</th>
+      <div className="panel">
+        {loading ? (
+          <div className="page-loading">Loading...</div>
+        ) : logs.length === 0 ? (
+          <div className="empty-state">No attendance records found.</div>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Subject</th>
+                <th>Status</th>
+                <th>Recorded At</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.date}</td>
+                  <td>{r.subject_code} — {r.subject_name}</td>
+                  <td>
+                    <span className={`badge ${r.status === "present" ? "bg-success" : "bg-danger"}`}>
+                      {r.status}
+                    </span>
+                  </td>
+                  <td>{new Date(r.timestamp).toLocaleString()}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {logs.map((r, i) => (
-                  <tr key={i}>
-                    <td>{r.date}</td>
-                    <td>{r.subject_code} — {r.subject_name}</td>
-                    <td>
-                      <span className={`badge ${r.status === "present" ? "bg-success" : "bg-danger"}`}>
-                        {r.status}
-                      </span>
-                    </td>
-                    <td>{new Date(r.timestamp).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

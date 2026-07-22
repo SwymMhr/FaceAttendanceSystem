@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getStudentSummary, getStudentTrend } from "../api";
 import AttendanceTrendChart from "../components/AttendanceTrendChart";
+import PageHeader from "../components/PageHeader";
 
 export default function StudentDashboard() {
   const [summary, setSummary] = useState(null);
@@ -18,61 +19,57 @@ export default function StudentDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="container mt-4">Loading...</div>;
-
   return (
-    <div className="container mt-4">
-      <h1>My Attendance</h1>
+    <div className="page">
+      <PageHeader title="My Attendance" />
 
       {error && <div className="alert alert-danger">{error}</div>}
+      {loading && <div className="page-loading">Loading...</div>}
 
       {summary && (
         <>
-          <div className="card mb-4" style={{ maxWidth: 320 }}>
-            <div className="card-body text-center">
-              <h6 className="text-muted mb-1">Overall Attendance</h6>
-              <div style={{ fontSize: "2.5rem", fontWeight: "bold" }}>
-                {summary.percentage}%
-              </div>
-              <small className="text-muted">
-                {summary.total_present} present / {summary.total} total
-              </small>
+          <div className="stat-card mb-4" style={{ maxWidth: 220 }}>
+            <div className="stat-card__value">{summary.percentage}%</div>
+            <div className="stat-card__label">
+              Overall attendance — {summary.total_present} present / {summary.total} total
             </div>
           </div>
 
-          <h5>By Subject</h5>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Subject</th>
-                <th>Present</th>
-                <th>Absent</th>
-                <th>%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summary.by_subject.map((s) => (
-                <tr key={s.subject_id}>
-                  <td>{s.subject_code}</td>
-                  <td>{s.subject_name}</td>
-                  <td>{s.present_count}</td>
-                  <td>{s.absent_count}</td>
-                  <td>{s.percentage}%</td>
-                </tr>
-              ))}
-              {summary.by_subject.length === 0 && (
+          <div className="panel">
+            <h2 className="panel-title">By Subject</h2>
+            <table className="table">
+              <thead>
                 <tr>
-                  <td colSpan={5} className="text-center text-muted">
-                    No attendance records yet.
-                  </td>
+                  <th>Code</th>
+                  <th>Subject</th>
+                  <th>Present</th>
+                  <th>Absent</th>
+                  <th>%</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {summary.by_subject.map((s) => (
+                  <tr key={s.subject_id}>
+                    <td>{s.subject_code}</td>
+                    <td>{s.subject_name}</td>
+                    <td>{s.present_count}</td>
+                    <td>{s.absent_count}</td>
+                    <td>{s.percentage}%</td>
+                  </tr>
+                ))}
+                {summary.by_subject.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="empty-state">No attendance records yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-          <h5 className="mt-4">Last 14 Days</h5>
-          <AttendanceTrendChart data={trend} />
+          <div className="panel">
+            <h2 className="panel-title">Last 14 Days</h2>
+            <AttendanceTrendChart data={trend} />
+          </div>
         </>
       )}
     </div>

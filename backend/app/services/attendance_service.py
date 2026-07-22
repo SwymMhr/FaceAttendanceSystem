@@ -1,7 +1,9 @@
 # app/services/attendance_service.py
-# Marks a student "present" for whichever period is currently in session
-# for their batch. Replaces the old confidence-only insert — attendance
-# is now always tied to a real period_id + date.
+# Marks a student "pending" for whichever period is currently in session
+# for their batch, whenever the camera recognizes them — it does NOT write
+# "present" directly anymore. A teacher has to confirm (or the end-of-day
+# auto-finalize has to run) before a detection counts as present. Attendance
+# is always tied to a real period_id + date.
 
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -53,6 +55,12 @@ def mark_attendance_logic(db: Session, student_id: int, confidence: float) -> di
     """
     Called from both /mark_attendance and /process_frame with the same
     signature (db, student_id, confidence) they already use.
+
+    A camera match no longer writes "present" straight to the database —
+    it records a "pending" row that a teacher has to review. The teacher
+    then confirms it as present, rejects it as absent, or it gets
+    auto-confirmed present at end of day if nobody touches it
+    (see absence_service.finalize_period_absentees).
     """
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
@@ -81,9 +89,15 @@ def mark_attendance_logic(db: Session, student_id: int, confidence: float) -> di
           .first()
     )
     if existing:
+        if existing.status == "pending":
+            return {
+                "status": "skipped",
+                "message": f"Already awaiting teacher confirmation for {period.subject.subject_name} today.",
+                "student": student.student_name,
+            }
         return {
             "status": "skipped",
-            "message": f"Already marked present for {period.subject.subject_name} today.",
+            "message": f"Already marked {existing.status} for {period.subject.subject_name} today.",
             "student": student.student_name,
         }
 
@@ -91,7 +105,7 @@ def mark_attendance_logic(db: Session, student_id: int, confidence: float) -> di
         student_id=student.id,
         period_id=period.id,
         date=today_local,
-        status="present",
+        status="pending",
         confidence=confidence,
         timestamp=datetime.now(timezone.utc),
     )
@@ -100,9 +114,61 @@ def mark_attendance_logic(db: Session, student_id: int, confidence: float) -> di
     db.refresh(record)
 
     return {
-        "status": "marked",
-        "message": "Attendance marked.",
+        "status": "pending",
+        "message": "Face recognized — awaiting teacher confirmation.",
         "student": student.student_name,
         "subject": period.subject.subject_name,
         "timestamp": record.timestamp.isoformat(),
     }
+
+
+def set_attendance_status(
+    db: Session,
+    student_id: int,
+    period_id: int,
+    target_date,
+    status: str,
+    confidence: float | None = None,
+) -> Attendance:
+    """
+    Teacher-driven override: create or update the attendance row for
+    (student, period, date) to an explicit status ("present" or "absent").
+
+    Used for:
+      - confirming a pending camera detection ("present")
+      - rejecting a pending camera detection ("absent")
+      - forcing attendance for a student the camera never detected at all
+    Always wins over whatever was there before (including a prior
+    confirm/reject), since it's an explicit teacher decision.
+    """
+    if status not in ("present", "absent"):
+        raise ValueError("status must be 'present' or 'absent'.")
+
+    record = (
+        db.query(Attendance)
+          .filter(
+              Attendance.student_id == student_id,
+              Attendance.period_id == period_id,
+              Attendance.date == target_date,
+          )
+          .first()
+    )
+
+    if record:
+        record.status = status
+        if confidence is not None:
+            record.confidence = confidence
+    else:
+        record = Attendance(
+            student_id=student_id,
+            period_id=period_id,
+            date=target_date,
+            status=status,
+            confidence=confidence,
+            timestamp=datetime.now(timezone.utc),
+        )
+        db.add(record)
+
+    db.commit()
+    db.refresh(record)
+    return record

@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
 import API from "../api";
+import PageHeader from "../components/PageHeader";
 
-// Maps the backend's attendance_status to a Bootstrap badge color, so it's
-// obvious at a glance whether a face actually got marked present or not.
+// Maps the backend's attendance_status to a Bootstrap badge color. A
+// recognized face lands as "pending" — final confirmation happens on the
+// period's Review screen (Teacher Dashboard → Today's Classes → Review).
 const STATUS_BADGE = {
-  marked: "bg-success",
+  pending: "bg-info text-dark",
   skipped: "bg-warning text-dark",
   error: "bg-danger",
   unrecognized: "bg-secondary",
@@ -62,29 +64,31 @@ export default function AttendancePage() {
   };
 
   return (
-    <div className="container mt-4">
-      <h1>Live Attendance</h1>
+    <div className="page">
+      <PageHeader title="Live Attendance" />
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      <div className="d-flex gap-2 mb-3">
-        <button className="btn btn-primary" onClick={startCamera} disabled={cameraOn}>
-          {cameraOn ? "Camera On" : "Start Camera"}
-        </button>
-        <button className="btn btn-success" onClick={captureFrame} disabled={!cameraOn || capturing}>
-          {capturing ? "Processing..." : "Capture Frame"}
-        </button>
-      </div>
+      <div className="panel">
+        <div className="d-flex gap-2 mb-3">
+          <button className="btn btn-primary" onClick={startCamera} disabled={cameraOn}>
+            {cameraOn ? "Camera On" : "Start Camera"}
+          </button>
+          <button className="btn btn-success" onClick={captureFrame} disabled={!cameraOn || capturing}>
+            {capturing ? "Processing..." : "Capture Frame"}
+          </button>
+        </div>
 
-      <div className="mb-4" style={{ maxWidth: 480 }}>
-        <video ref={videoRef} autoPlay playsInline className="w-100 rounded border" />
+        <div style={{ maxWidth: 480 }}>
+          <video ref={videoRef} autoPlay playsInline className="w-100 rounded border" />
+        </div>
       </div>
 
       {results !== null && (
-        <>
-          <h5>Result</h5>
+        <div className="panel">
+          <h2 className="panel-title">Result</h2>
           {results.length === 0 ? (
-            <p className="text-muted">No faces detected in that frame.</p>
+            <div className="empty-state">No faces detected in that frame.</div>
           ) : (
             <ul className="list-group" style={{ maxWidth: 560 }}>
               {results.map((r, i) => (
@@ -104,7 +108,7 @@ export default function AttendancePage() {
               ))}
             </ul>
           )}
-        </>
+        </div>
       )}
     </div>
   );

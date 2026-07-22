@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAttendanceLogs } from "../api";
+import PageHeader from "../components/PageHeader";
 
 export default function HistoryPage() {
   const [logs, setLogs] = useState([]);
@@ -23,19 +24,19 @@ export default function HistoryPage() {
   }, []);
 
   return (
-    <div className="container mt-4">
-      <h1>Attendance History</h1>
+    <div className="page">
+      <PageHeader title="Attendance History" />
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : logs.length === 0 ? (
-        <p className="text-muted">No attendance records found.</p>
-      ) : (
-        <div className="card">
+      <div className="panel">
+        {loading ? (
+          <div className="page-loading">Loading...</div>
+        ) : logs.length === 0 ? (
+          <div className="empty-state">No attendance records found.</div>
+        ) : (
           <div className="table-responsive">
-            <table className="table table-striped table-bordered mb-0">
+            <table className="table">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -66,8 +67,8 @@ export default function HistoryPage() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

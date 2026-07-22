@@ -7,6 +7,7 @@ import {
   deleteUser,
   getBatches,
 } from "../api";
+import PageHeader from "../components/PageHeader";
 
 const emptyTeacherForm = { user_name: "", email: "", password: "" };
 const emptyStudentForm = {
@@ -136,13 +137,12 @@ export default function AdminUsers() {
   };
 
   return (
-    <div className="container mt-4">
-      <h1>Manage Users</h1>
+    <div className="page">
+      <PageHeader title="Manage Users" />
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      <div className="card mb-4">
-        <div className="card-body">
+      <div className="panel">
           <ul className="nav nav-tabs mb-3">
             <li className="nav-item">
               <button
@@ -269,27 +269,27 @@ export default function AdminUsers() {
               </div>
             </form>
           )}
+      </div>
+
+      <div className="panel">
+        <div className="d-flex align-items-center gap-2 mb-3">
+          <label className="mb-0">Filter by role:</label>
+          <select
+            className="form-select"
+            style={{ maxWidth: 200 }}
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+          >
+            <option value="">All</option>
+            <option value="student">Student</option>
+            <option value="teacher">Teacher</option>
+            <option value="admin">Admin</option>
+          </select>
         </div>
-      </div>
 
-      <div className="d-flex align-items-center gap-2 mb-3">
-        <label className="mb-0">Filter by role:</label>
-        <select
-          className="form-select"
-          style={{ maxWidth: 200 }}
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-        >
-          <option value="">All</option>
-          <option value="student">Student</option>
-          <option value="teacher">Teacher</option>
-          <option value="admin">Admin</option>
-        </select>
-      </div>
-
-      {loading ? (
-        <p>Loading...</p>
-      ) : (
+        {loading ? (
+          <div className="page-loading">Loading...</div>
+        ) : (
         <div className="table-responsive">
           <table className="table">
             <thead>
@@ -395,15 +395,14 @@ export default function AdminUsers() {
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="text-center text-muted">
-                    No users found.
-                  </td>
+                  <td colSpan={8} className="empty-state">No users found.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

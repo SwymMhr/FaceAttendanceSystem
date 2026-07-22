@@ -8,6 +8,7 @@ import {
   createPeriod,
   deletePeriod,
 } from "../api";
+import PageHeader from "../components/PageHeader";
 
 const DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY"];
 
@@ -115,15 +116,15 @@ export default function AdminSchedule() {
     }
   };
 
-  if (loading) return <div className="container mt-4">Loading...</div>;
+  if (loading) return <div className="page"><div className="page-loading">Loading...</div></div>;
 
   return (
-    <div className="container mt-4">
-      <h1>Manage Schedule</h1>
+    <div className="page">
+      <PageHeader title="Manage Schedule" />
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      <div className="d-flex align-items-center gap-2 mb-4">
+      <div className="panel d-flex align-items-center gap-2">
         <label className="mb-0">Batch:</label>
         <select
           className="form-select"
@@ -144,8 +145,9 @@ export default function AdminSchedule() {
 
       {selectedBatchId && (
         <>
-          <div className="table-responsive mb-4">
-            <table className="table table-bordered text-center align-middle">
+          <div className="panel">
+          <div className="table-responsive">
+            <table className="table table-bordered text-center align-middle mb-0">
               <thead>
                 <tr>
                   <th style={{ width: 140 }}>Period</th>
@@ -194,13 +196,13 @@ export default function AdminSchedule() {
               </tbody>
             </table>
           </div>
+          </div>
 
           {showForm && (
-            <div className="card mb-4" style={{ maxWidth: 640 }}>
-              <div className="card-body">
-                <h6 className="card-title">
+            <div className="panel" style={{ maxWidth: 640 }}>
+                <h2 className="panel-title">
                   Assign period — {form.day_of_week[0] + form.day_of_week.slice(1).toLowerCase()}, slot #{form.period_number}
-                </h6>
+                </h2>
                 <form className="row g-2" onSubmit={handleCreate}>
                   <div className="col-md-6">
                     <select
@@ -248,7 +250,6 @@ export default function AdminSchedule() {
                     </button>
                   </div>
                 </form>
-              </div>
             </div>
           )}
         </>

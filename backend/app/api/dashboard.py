@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from app.db.database import get_db
 from app.models.db_models import User, Student, Batch, Period, Attendance
 from app.api.deps import require_role
+from app.services.attendance_service import set_attendance_status
 
 LOCAL_TZ = ZoneInfo("Asia/Kathmandu")
 _WEEKDAY_MAP = {6: "SUNDAY", 0: "MONDAY", 1: "TUESDAY", 2: "WEDNESDAY", 3: "THURSDAY"}
@@ -71,6 +72,23 @@ class TodayPeriod(BaseModel):
     period_number: int
     start_time: str
     end_time: str
+
+
+class PeriodAttendanceRow(BaseModel):
+    student_id: int
+    student_code: str
+    student_name: str
+    # "pending"  = camera detected them, awaiting teacher confirmation
+    # "present"  = confirmed present (by camera + teacher, or forced by teacher)
+    # "absent"   = confirmed absent (backfilled, or teacher-rejected/marked)
+    # "none"     = no record yet for this period+date at all
+    status: str
+    confidence: Optional[float] = None
+
+
+class AttendanceOverride(BaseModel):
+    student_id: int
+    status: str  # "present" or "absent"
 
 
 class AdminOverview(BaseModel):
@@ -341,6 +359,98 @@ def batch_trend(
           .all()
     )
     return _build_trend(rows, days)
+
+
+def _get_period_for_teacher(db: Session, period_id: int, current_user: User) -> Period:
+    period = db.query(Period).filter(Period.id == period_id).first()
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found.")
+    if current_user.role == "teacher" and period.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You don't teach this period.")
+    return period
+
+
+@teacher_router.get("/period/{period_id}/attendance", response_model=List[PeriodAttendanceRow])
+def period_attendance(
+    period_id: int,
+    date: Optional[date_type] = None,
+    current_user: User = Depends(require_role("teacher", "admin")),
+    db: Session = Depends(get_db),
+):
+    """
+    Full roster for this period's batch, each student's current attendance
+    status for the given date (default: today) — including "pending"
+    camera detections still awaiting confirmation, and "none" for students
+    the camera hasn't seen at all yet. This is the review screen: it's
+    where a teacher sees who got auto-detected before anything is final,
+    and can confirm/reject/force-mark anyone regardless of the camera.
+    """
+    period = _get_period_for_teacher(db, period_id, current_user)
+    target_date = date or _today_local()
+
+    students = (
+        db.query(Student)
+          .filter(Student.batch_id == period.batch_id)
+          .order_by(Student.student_name)
+          .all()
+    )
+    rows_by_student = {
+        r.student_id: r
+        for r in db.query(Attendance).filter(
+            Attendance.period_id == period.id, Attendance.date == target_date
+        ).all()
+    }
+
+    out = []
+    for s in students:
+        row = rows_by_student.get(s.id)
+        out.append(PeriodAttendanceRow(
+            student_id=s.id,
+            student_code=s.student_code,
+            student_name=s.student_name,
+            status=row.status if row else "none",
+            confidence=row.confidence if row else None,
+        ))
+    return out
+
+
+@teacher_router.post("/period/{period_id}/attendance", response_model=PeriodAttendanceRow)
+def override_attendance(
+    period_id: int,
+    payload: AttendanceOverride,
+    date: Optional[date_type] = None,
+    current_user: User = Depends(require_role("teacher", "admin")),
+    db: Session = Depends(get_db),
+):
+    """
+    Teacher's manual override, for any student in this period's batch —
+    used to confirm a pending detection as present, reject one as absent,
+    or force attendance for a student the camera never detected at all.
+    Always takes effect immediately, overwriting whatever was there.
+    """
+    if payload.status not in ("present", "absent"):
+        raise HTTPException(status_code=400, detail="status must be 'present' or 'absent'.")
+
+    period = _get_period_for_teacher(db, period_id, current_user)
+    target_date = date or _today_local()
+
+    student = (
+        db.query(Student)
+          .filter(Student.id == payload.student_id, Student.batch_id == period.batch_id)
+          .first()
+    )
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found in this period's batch.")
+
+    record = set_attendance_status(db, student.id, period.id, target_date, payload.status)
+
+    return PeriodAttendanceRow(
+        student_id=student.id,
+        student_code=student.student_code,
+        student_name=student.student_name,
+        status=record.status,
+        confidence=record.confidence,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════

@@ -8,6 +8,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 import StudentHistory from "./pages/StudentHistory";
 import TeacherDashboard from "./pages/TeacherDashboard";
 import BatchRosterPage from "./pages/BatchRosterPage";
+import PeriodAttendancePage from "./pages/PeriodAttendancePage";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminBatches from "./pages/AdminBatches";
 import AdminSubjects from "./pages/AdminSubjects";
@@ -135,6 +136,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={["teacher", "admin"]}>
               <BatchRosterPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/period/:periodId"
+          element={
+            <ProtectedRoute roles={["teacher", "admin"]}>
+              <PeriodAttendancePage />
             </ProtectedRoute>
           }
         />

@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate, NavLink, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import RegisterFacePage from "./pages/RegisterFacePage";
 import AttendancePage from "./pages/AttendancePage";
 import HistoryPage from "./pages/HistoryPage";
@@ -13,7 +14,10 @@ import AdminSubjects from "./pages/AdminSubjects";
 import AdminUsers from "./pages/AdminUsers";
 import AdminSchedule from "./pages/AdminSchedule";
 import ProtectedRoute from "./components/ProtectedRoute";
+import Sidebar from "./components/Sidebar";
+import Topbar from "./components/Topbar";
 import { isLoggedIn, logoutUser, getRole } from "./api";
+import "./App.css";
 
 // "/" doesn't render a page itself — it just sends each logged-in user
 // to whichever dashboard actually belongs to their role.
@@ -30,58 +34,34 @@ export default function App() {
   const loggedIn = isLoggedIn();
   const username = localStorage.getItem("username");
   const role = getRole();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleLogout = () => {
     logoutUser();
     navigate("/login");
   };
 
+  const closeSidebar = () => setSidebarOpen(false);
+
   return (
     <>
-      {/* Navbar only renders once logged in, and only shows links relevant
-          to that user's role. No Register link — accounts are admin-created. */}
+      {/* Topbar + Sidebar only render once logged in. Sidebar's link set is
+          role-driven internally (see components/Sidebar.jsx) — no Register
+          link either way, since accounts are admin-created. */}
       {loggedIn && (
-        <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
-          <div className="container">
-            <div className="navbar-nav ms-auto align-items-lg-center">
-              {role === "student" && (
-                <>
-                  <NavLink className="nav-link" to="/student">My Attendance</NavLink>
-                  <NavLink className="nav-link" to="/student/history">History</NavLink>
-                </>
-              )}
-
-              {role === "teacher" && (
-                <>
-                  <NavLink className="nav-link" to="/teacher">Dashboard</NavLink>
-                  <NavLink className="nav-link" to="/teacher/enroll">Register Faces</NavLink>
-                  <NavLink className="nav-link" to="/teacher/attendance">Live Attendance</NavLink>
-                  <NavLink className="nav-link" to="/teacher/history">History</NavLink>
-                </>
-              )}
-
-              {role === "admin" && (
-                <>
-                  <NavLink className="nav-link" to="/admin">Overview</NavLink>
-                  <NavLink className="nav-link" to="/admin/batches">Batches</NavLink>
-                  <NavLink className="nav-link" to="/admin/subjects">Subjects</NavLink>
-                  <NavLink className="nav-link" to="/admin/users">Users</NavLink>
-                  <NavLink className="nav-link" to="/admin/schedule">Schedule</NavLink>
-                  <NavLink className="nav-link" to="/teacher/enroll">Register Faces</NavLink>
-                  <NavLink className="nav-link" to="/teacher/attendance">Live Attendance</NavLink>
-                  <NavLink className="nav-link" to="/teacher/history">History</NavLink>
-                </>
-              )}
-
-              <span className="nav-link text-white-50">Hi, {username}</span>
-              <button className="btn btn-outline-light btn-sm ms-lg-2" onClick={handleLogout}>
-                Logout
-              </button>
-            </div>
-          </div>
-        </nav>
+        <>
+          <Topbar username={username} onToggleSidebar={() => setSidebarOpen((v) => !v)} />
+          <Sidebar
+            role={role}
+            username={username}
+            open={sidebarOpen}
+            onNavigate={closeSidebar}
+            onLogout={handleLogout}
+          />
+        </>
       )}
 
+      <div className={loggedIn ? "app-content" : undefined}>
       <Routes>
         {/* Public route. If already logged in, skip straight past it. */}
         <Route
@@ -205,6 +185,7 @@ export default function App() {
             will bounce logged-in users to their real dashboard from there). */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      </div>
     </>
   );
 }

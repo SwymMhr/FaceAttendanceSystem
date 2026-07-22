@@ -1,12 +1,17 @@
 import { Routes, Route, Navigate, NavLink, useNavigate } from "react-router-dom";
-import EnrollPage from "./pages/EnrollPage";
+import RegisterFacePage from "./pages/RegisterFacePage";
 import AttendancePage from "./pages/AttendancePage";
 import HistoryPage from "./pages/HistoryPage";
 import LoginPage from "./pages/LoginPage";
 import StudentDashboard from "./pages/StudentDashboard";
+import StudentHistory from "./pages/StudentHistory";
 import TeacherDashboard from "./pages/TeacherDashboard";
 import BatchRosterPage from "./pages/BatchRosterPage";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminBatches from "./pages/AdminBatches";
+import AdminSubjects from "./pages/AdminSubjects";
+import AdminUsers from "./pages/AdminUsers";
+import AdminSchedule from "./pages/AdminSchedule";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { isLoggedIn, logoutUser, getRole } from "./api";
 
@@ -40,13 +45,16 @@ export default function App() {
           <div className="container">
             <div className="navbar-nav ms-auto align-items-lg-center">
               {role === "student" && (
-                <NavLink className="nav-link" to="/student">My Attendance</NavLink>
+                <>
+                  <NavLink className="nav-link" to="/student">My Attendance</NavLink>
+                  <NavLink className="nav-link" to="/student/history">History</NavLink>
+                </>
               )}
 
               {role === "teacher" && (
                 <>
                   <NavLink className="nav-link" to="/teacher">Dashboard</NavLink>
-                  <NavLink className="nav-link" to="/teacher/enroll">Enroll</NavLink>
+                  <NavLink className="nav-link" to="/teacher/enroll">Register Faces</NavLink>
                   <NavLink className="nav-link" to="/teacher/attendance">Live Attendance</NavLink>
                   <NavLink className="nav-link" to="/teacher/history">History</NavLink>
                 </>
@@ -55,7 +63,11 @@ export default function App() {
               {role === "admin" && (
                 <>
                   <NavLink className="nav-link" to="/admin">Overview</NavLink>
-                  <NavLink className="nav-link" to="/teacher/enroll">Enroll</NavLink>
+                  <NavLink className="nav-link" to="/admin/batches">Batches</NavLink>
+                  <NavLink className="nav-link" to="/admin/subjects">Subjects</NavLink>
+                  <NavLink className="nav-link" to="/admin/users">Users</NavLink>
+                  <NavLink className="nav-link" to="/admin/schedule">Schedule</NavLink>
+                  <NavLink className="nav-link" to="/teacher/enroll">Register Faces</NavLink>
                   <NavLink className="nav-link" to="/teacher/attendance">Live Attendance</NavLink>
                   <NavLink className="nav-link" to="/teacher/history">History</NavLink>
                 </>
@@ -96,6 +108,14 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/student/history"
+          element={
+            <ProtectedRoute roles={["student"]}>
+              <StudentHistory />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Teacher (admin can also reach these — e.g. to run enrollment/live capture) */}
         <Route
@@ -110,7 +130,7 @@ export default function App() {
           path="/teacher/enroll"
           element={
             <ProtectedRoute roles={["teacher", "admin"]}>
-              <EnrollPage />
+              <RegisterFacePage />
             </ProtectedRoute>
           }
         />
@@ -145,6 +165,38 @@ export default function App() {
           element={
             <ProtectedRoute roles={["admin"]}>
               <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/batches"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AdminBatches />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/subjects"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AdminSubjects />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AdminUsers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/schedule"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AdminSchedule />
             </ProtectedRoute>
           }
         />

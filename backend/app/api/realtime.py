@@ -39,15 +39,30 @@ async def process_frame(
 
         student, score, db_id = identify_face(pil_img, db)
 
-        if student:
-            # NOTE (Phase 4): mark_attendance_logic() likely has the same
-            # missing period_id/date gap as /mark_attendance above — check
-            # app/services/attendance_service.py once we get to Phase 4.
-            mark_attendance_logic(db, db_id, score)
-
+        if not student:
+            # A face was detected in the frame, but it didn't match anyone
+            # closely enough (or there are no enrolled embeddings at all).
             results.append({
-                "name": student.student_name,
-                "confidence": score
+                "name": "Unknown",
+                "confidence": round(score, 4),
+                "attendance_status": "unrecognized",
+                "message": "Face detected but not recognized as any enrolled student.",
             })
+            continue
+
+        # mark_attendance_logic() returns a real status ("marked" / "skipped"
+        # / "error") with a human-readable reason — surface it instead of
+        # silently discarding it like the old version did. A recognized face
+        # does NOT guarantee attendance was actually written (e.g. no class
+        # currently in session for that student's batch).
+        outcome = mark_attendance_logic(db, db_id, score)
+
+        results.append({
+            "name": student.student_name,
+            "confidence": round(score, 4),
+            "attendance_status": outcome.get("status"),
+            "message": outcome.get("message"),
+            "subject": outcome.get("subject"),
+        })
 
     return {"results": results}

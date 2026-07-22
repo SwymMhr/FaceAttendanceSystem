@@ -75,6 +75,10 @@ class UserOut(BaseModel):
     email: str
     role: str
     is_active: bool
+    # tbl_students.id — NOT the same as `id` above (which is tbl_users.id).
+    # Anything that keys off the student record itself (face embeddings,
+    # attendance, roster lookups) needs THIS id, not the login account id.
+    student_db_id: Optional[int] = None
     student_code: Optional[str] = None
     student_name: Optional[str] = None
     batch_id: Optional[int] = None
@@ -241,6 +245,7 @@ def create_student(payload: StudentCreate, db: Session = Depends(get_db)):
     return UserOut(
         id=user.id, user_name=user.user_name, email=user.email,
         role=user.role, is_active=user.is_active,
+        student_db_id=student.id,
         student_code=student.student_code, student_name=student.student_name,
         batch_id=student.batch_id,
         batch_name=student.batch.batch_name if student.batch else None,
@@ -264,6 +269,7 @@ def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
         out.append(UserOut(
             id=u.id, user_name=u.user_name, email=u.email,
             role=u.role, is_active=u.is_active,
+            student_db_id=sp.id if sp else None,
             student_code=sp.student_code if sp else None,
             student_name=sp.student_name if sp else None,
             batch_id=sp.batch_id if sp else None,
@@ -307,6 +313,7 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     return UserOut(
         id=user.id, user_name=user.user_name, email=user.email,
         role=user.role, is_active=user.is_active,
+        student_db_id=sp.id if sp else None,
         student_code=sp.student_code if sp else None,
         student_name=sp.student_name if sp else None,
         batch_id=sp.batch_id if sp else None,

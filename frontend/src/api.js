@@ -83,8 +83,163 @@ export async function getBatchTrend(batchId, days = 30) {
   return res.data;
 }
 
+export async function finalizePeriod(periodId, targetDate) {
+  // POST /finalize_period — manual trigger for the same absence-backfill +
+  // email job the background scheduler runs automatically once a period
+  // ends. period_id/target_date are plain query params on this route, not
+  // a JSON body.
+  const params = new URLSearchParams({ period_id: periodId });
+  if (targetDate) params.append("target_date", targetDate);
+  const res = await api.post(`/finalize_period?${params.toString()}`);
+  return res.data;
+}
+
 export async function getAdminOverview() {
   const res = await api.get("/admin/overview");
+  return res.data;
+}
+
+// ── Attendance logs (teacher/admin "History" page) ─────────────────────────
+
+export async function getAttendanceLogs(limit = 100) {
+  const res = await api.get(`/get_attendance_logs?limit=${limit}`);
+  return res.data;
+}
+
+// ── Admin: Batches ───────────────────────────────────────────────────────────
+
+export async function getBatches() {
+  const res = await api.get("/admin/batches");
+  return res.data;
+}
+
+export async function createBatch(batch_name) {
+  const res = await api.post("/admin/batches", { batch_name });
+  return res.data;
+}
+
+export async function updateBatch(batchId, batch_name) {
+  const res = await api.put(`/admin/batches/${batchId}`, { batch_name });
+  return res.data;
+}
+
+export async function deleteBatch(batchId) {
+  const res = await api.delete(`/admin/batches/${batchId}`);
+  return res.data;
+}
+
+// ── Admin: Subjects ──────────────────────────────────────────────────────────
+
+export async function getSubjects() {
+  const res = await api.get("/admin/subjects");
+  return res.data;
+}
+
+export async function createSubject(subject_code, subject_name) {
+  const res = await api.post("/admin/subjects", { subject_code, subject_name });
+  return res.data;
+}
+
+export async function updateSubject(subjectId, subject_code, subject_name) {
+  const res = await api.put(`/admin/subjects/${subjectId}`, { subject_code, subject_name });
+  return res.data;
+}
+
+export async function deleteSubject(subjectId) {
+  const res = await api.delete(`/admin/subjects/${subjectId}`);
+  return res.data;
+}
+
+// ── Admin: Users (teachers + students) ───────────────────────────────────────
+
+export async function getUsers(role) {
+  const query = role ? `?role=${role}` : "";
+  const res = await api.get(`/admin/users${query}`);
+  return res.data;
+}
+
+export async function createTeacher(payload) {
+  // payload: { user_name, email, password }
+  const res = await api.post("/admin/users/teachers", payload);
+  return res.data;
+}
+
+export async function createStudent(payload) {
+  // payload: { user_name, email, password, student_code, student_name, batch_id }
+  const res = await api.post("/admin/users/students", payload);
+  return res.data;
+}
+
+export async function updateUser(userId, payload) {
+  // payload: { email?, is_active?, role?, student_name?, batch_id? }
+  const res = await api.put(`/admin/users/${userId}`, payload);
+  return res.data;
+}
+
+export async function deleteUser(userId) {
+  const res = await api.delete(`/admin/users/${userId}`);
+  return res.data;
+}
+
+// ── Face registration (attach photos to an EXISTING student) ────────────────
+// Students themselves are created by an admin via createStudent() above —
+// this is only for adding face photos to a student who already exists.
+
+export async function getBatchStudents(batchId) {
+  // No batch-scoped student-list endpoint on the backend yet, so fetch all
+  // students and filter client-side. Fine at school-roster scale.
+  const students = await getUsers("student");
+  return batchId ? students.filter((s) => s.batch_id === Number(batchId)) : students;
+}
+
+export async function getEmbeddingCount(studentId) {
+  const res = await api.get(`/students/${studentId}/embeddings`);
+  return res.data;
+}
+
+export async function registerFace(studentId, images) {
+  const formData = new FormData();
+  formData.append("student_id", studentId);
+  for (const img of images) {
+    formData.append("images", img);
+  }
+  const res = await api.post("/register_face", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
+
+// ── Admin: Schedule (period slots + periods/timetable) ───────────────────────
+
+export async function getPeriodSlots() {
+  const res = await api.get("/admin/period-slots");
+  return res.data;
+}
+
+export async function getPeriods(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const res = await api.get(`/admin/periods${query ? `?${query}` : ""}`);
+  return res.data;
+}
+
+export async function getBatchTimetable(batchId) {
+  const res = await api.get(`/admin/periods/timetable/${batchId}`);
+  return res.data;
+}
+
+export async function createPeriod(payload) {
+  // payload: { batch_id, subject_id, teacher_id, day_of_week, period_number }
+  const res = await api.post("/admin/periods", payload);
+  return res.data;
+}
+
+export async function updatePeriod(periodId, payload) {
+  const res = await api.put(`/admin/periods/${periodId}`, payload);
+  return res.data;
+}
+
+export async function deletePeriod(periodId) {
+  const res = await api.delete(`/admin/periods/${periodId}`);
   return res.data;
 }
 

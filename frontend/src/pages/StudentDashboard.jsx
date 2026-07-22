@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
-import { getStudentSummary } from "../api";
+import { getStudentSummary, getStudentTrend } from "../api";
+import AttendanceTrendChart from "../components/AttendanceTrendChart";
 
 export default function StudentDashboard() {
   const [summary, setSummary] = useState(null);
+  const [trend, setTrend] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getStudentSummary()
-      .then(setSummary)
+    Promise.all([getStudentSummary(), getStudentTrend(14)])
+      .then(([summaryData, trendData]) => {
+        setSummary(summaryData);
+        setTrend(trendData);
+      })
       .catch((err) => setError(err.response?.data?.detail || "Failed to load attendance summary."))
       .finally(() => setLoading(false));
   }, []);
@@ -65,6 +70,9 @@ export default function StudentDashboard() {
               )}
             </tbody>
           </table>
+
+          <h5 className="mt-4">Last 14 Days</h5>
+          <AttendanceTrendChart data={trend} />
         </>
       )}
     </div>

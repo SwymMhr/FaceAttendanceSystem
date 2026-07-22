@@ -26,7 +26,11 @@ class User(Base):
     )
 
     student_profile = relationship("Student", back_populates="user", uselist=False)
-    periods_taught  = relationship("Period", back_populates="teacher")
+    # teacher_id has ON DELETE CASCADE at the DB level (see reset_schema.sql).
+    # passive_deletes=True tells SQLAlchemy to let Postgres handle removing
+    # these rows itself instead of first trying to null out teacher_id —
+    # which would fail, since that column is NOT NULL.
+    periods_taught  = relationship("Period", back_populates="teacher", passive_deletes=True)
 
 
 class Batch(Base):
@@ -38,7 +42,11 @@ class Batch(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     students = relationship("Student", back_populates="batch")
-    periods  = relationship("Period", back_populates="batch", cascade="all, delete")
+    # batch_id has ON DELETE CASCADE at the DB level, which itself cascades
+    # further into tbl_attendance (period_id is also ON DELETE CASCADE).
+    # passive_deletes=True lets Postgres run that whole chain in one
+    # statement instead of SQLAlchemy trying to manage each level itself.
+    periods  = relationship("Period", back_populates="batch", passive_deletes=True)
 
 
 class Student(Base):
@@ -47,21 +55,23 @@ class Student(Base):
     id           = Column(Integer, primary_key=True, index=True)
     student_code = Column(String, unique=True, index=True, nullable=False)
     student_name = Column(String, nullable=False)
-    user_id      = Column(Integer, ForeignKey("tbl_users.id"), unique=True, nullable=True)
-    batch_id     = Column(Integer, ForeignKey("tbl_batches.id"), nullable=True)
+    user_id      = Column(Integer, ForeignKey("tbl_users.id", ondelete="SET NULL"), unique=True, nullable=True)
+    batch_id     = Column(Integer, ForeignKey("tbl_batches.id", ondelete="SET NULL"), nullable=True)
     created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user        = relationship("User", back_populates="student_profile")
     batch       = relationship("Batch", back_populates="students")
-    embeddings  = relationship("Embedding", back_populates="student", cascade="all, delete")
-    attendances = relationship("Attendance", back_populates="student", cascade="all, delete")
+    # Both FKs are ON DELETE CASCADE at the DB level — let Postgres handle
+    # cleanup instead of SQLAlchemy managing it row-by-row in the ORM.
+    embeddings  = relationship("Embedding", back_populates="student", passive_deletes=True)
+    attendances = relationship("Attendance", back_populates="student", passive_deletes=True)
 
 
 class Embedding(Base):
     __tablename__ = "tbl_embeddings"
 
     id         = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("tbl_students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("tbl_students.id", ondelete="CASCADE"), nullable=False)
     vector     = Column(Text, nullable=False)
     image_path = Column(String, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -105,9 +115,9 @@ class Period(Base):
     __tablename__ = "tbl_periods"
 
     id            = Column(Integer, primary_key=True, index=True)
-    batch_id      = Column(Integer, ForeignKey("tbl_batches.id"), nullable=False)
-    subject_id    = Column(Integer, ForeignKey("tbl_subjects.id"), nullable=False)
-    teacher_id    = Column(Integer, ForeignKey("tbl_users.id"), nullable=False)
+    batch_id      = Column(Integer, ForeignKey("tbl_batches.id", ondelete="CASCADE"), nullable=False)
+    subject_id    = Column(Integer, ForeignKey("tbl_subjects.id", ondelete="CASCADE"), nullable=False)
+    teacher_id    = Column(Integer, ForeignKey("tbl_users.id", ondelete="CASCADE"), nullable=False)
     period_number = Column(Integer, ForeignKey("tbl_period_slots.period_number"), nullable=False)
     day_of_week   = Column(String, nullable=False)
     created_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -125,7 +135,11 @@ class Period(Base):
     subject     = relationship("Subject", back_populates="periods")
     teacher     = relationship("User", back_populates="periods_taught")
     slot        = relationship("PeriodSlot", back_populates="periods")
-    attendances = relationship("Attendance", back_populates="period")
+    # period_id has ON DELETE CASCADE at the DB level (see reset_schema.sql).
+    # passive_deletes=True tells SQLAlchemy to let Postgres remove these rows
+    # itself instead of first trying to null out period_id — which would
+    # fail, since that column is NOT NULL.
+    attendances = relationship("Attendance", back_populates="period", passive_deletes=True)
 
 
 class Attendance(Base):
@@ -138,8 +152,8 @@ class Attendance(Base):
     __tablename__ = "tbl_attendance"
 
     id         = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("tbl_students.id"), nullable=False)
-    period_id  = Column(Integer, ForeignKey("tbl_periods.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("tbl_students.id", ondelete="CASCADE"), nullable=False)
+    period_id  = Column(Integer, ForeignKey("tbl_periods.id", ondelete="CASCADE"), nullable=False)
     date       = Column(Date, nullable=False)
     status     = Column(String, nullable=False, default="present")
     confidence = Column(Float, nullable=True)

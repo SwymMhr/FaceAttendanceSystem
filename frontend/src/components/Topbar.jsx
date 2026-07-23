@@ -53,12 +53,6 @@ export default function Topbar({ displayName, onToggleSidebar }) {
         >
           <i className="bi bi-list" />
         </button>
-        <span className="app-topbar__brand">
-          Face<span>Attend</span>
-        </span>
-      </div>
-
-      <div className="app-topbar__center d-none d-sm-flex">
         <span className="app-topbar__clock">{timeString}</span>
         {pageTitle && (
           <>

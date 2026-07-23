@@ -7,6 +7,8 @@ export default function RegisterFacePage() {
   const [students, setStudents] = useState([]);
 
   const [selectedBatchId, setSelectedBatchId] = useState("");
+  // This holds a Student.id (tbl_students.id) — NOT the login account id.
+  // register_face / get_embedding_count both look students up by that id.
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [embeddingCount, setEmbeddingCount] = useState(null);
 
@@ -26,6 +28,7 @@ export default function RegisterFacePage() {
       .finally(() => setLoadingBatches(false));
   }, []);
 
+  // Reload the student dropdown whenever the batch changes.
   useEffect(() => {
     setSelectedStudentId("");
     setEmbeddingCount(null);
@@ -39,6 +42,7 @@ export default function RegisterFacePage() {
       .finally(() => setLoadingStudents(false));
   }, [selectedBatchId]);
 
+  // Show how many photos are already registered once a student is picked.
   useEffect(() => {
     setEmbeddingCount(null);
     setResult(null);
@@ -61,7 +65,7 @@ export default function RegisterFacePage() {
       setResult(data);
       setEmbeddingCount(data.total_embeddings);
       setImages([]);
-
+      // Reset the file input visually too.
       document.getElementById("register-face-file-input").value = "";
     } catch (err) {
       setError(err.response?.data?.detail || "Face registration failed.");
@@ -76,10 +80,14 @@ export default function RegisterFacePage() {
 
   return (
     <div className="page">
+      <PageHeader
+        title="Register Student Faces"        
+      />
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      <div className="panel" style={{ maxWidth: 560 }}>
+      <div className="panel">
+        <div style={{ maxWidth: 480 }}>
         <div className="mb-3">
           <label className="form-label">Batch</label>
           <select
@@ -117,6 +125,8 @@ export default function RegisterFacePage() {
                 : "Select a student..."}
             </option>
             {students.map((s) => (
+              // value is Student.id (student_db_id), not the login-account id —
+              // that's what the face-registration endpoints actually key off.
               <option key={s.id} value={s.student_db_id}>
                 {s.student_code} — {s.student_name}
               </option>
@@ -174,6 +184,7 @@ export default function RegisterFacePage() {
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

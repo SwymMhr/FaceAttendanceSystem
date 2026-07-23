@@ -35,11 +35,11 @@ def get_current_user(
     if payload is None:
         raise credentials_error
 
-    user_name = payload.get("sub")
-    if user_name is None:
+    email = payload.get("sub")
+    if email is None:
         raise credentials_error
 
-    user = db.query(User).filter(User.user_name == user_name).first()
+    user = db.query(User).filter(User.email == email).first()
     if user is None or not user.is_active:
         raise credentials_error
 

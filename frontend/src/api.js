@@ -20,12 +20,12 @@ api.interceptors.request.use((config) => {
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 
-export async function loginUser(username, password) {
-  const res = await api.post("/login", { username, password });
-  const { access_token, username: returnedUsername, role } = res.data;
+export async function loginUser(email, password) {
+  const res = await api.post("/login", { email, password });
+  const { access_token, display_name, role } = res.data;
 
   localStorage.setItem("token", access_token);
-  localStorage.setItem("username", returnedUsername);
+  localStorage.setItem("displayName", display_name);
   localStorage.setItem("role", role);
 
   return res.data;
@@ -33,7 +33,7 @@ export async function loginUser(username, password) {
 
 export function logoutUser() {
   localStorage.removeItem("token");
-  localStorage.removeItem("username");
+  localStorage.removeItem("displayName");
   localStorage.removeItem("role");
 }
 
@@ -179,20 +179,25 @@ export async function getUsers(role) {
   return res.data;
 }
 
+export async function getUser(userId) {
+  const res = await api.get(`/admin/users/${userId}`);
+  return res.data;
+}
+
 export async function createTeacher(payload) {
-  // payload: { user_name, email, password }
+  // payload: { full_name, email, password }
   const res = await api.post("/admin/users/teachers", payload);
   return res.data;
 }
 
 export async function createStudent(payload) {
-  // payload: { user_name, email, password, student_code, student_name, batch_id }
+  // payload: { email, password, student_code, student_name, batch_id }
   const res = await api.post("/admin/users/students", payload);
   return res.data;
 }
 
 export async function updateUser(userId, payload) {
-  // payload: { email?, is_active?, role?, student_name?, batch_id? }
+  // payload: { email?, password?, is_active?, role?, full_name?, student_code?, student_name?, batch_id? }
   const res = await api.put(`/admin/users/${userId}`, payload);
   return res.data;
 }

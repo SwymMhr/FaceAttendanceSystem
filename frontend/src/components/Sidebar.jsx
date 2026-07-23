@@ -35,9 +35,9 @@ const ROLE_LABEL = {
   admin: "Administrator",
 };
 
-export default function Sidebar({ role, username, open, onNavigate, onLogout }) {
+export default function Sidebar({ role, displayName, open, onNavigate, onLogout }) {
   const items = NAV_BY_ROLE[role] || [];
-  const initial = (username || "?").charAt(0).toUpperCase();
+  const initial = (displayName || "?").charAt(0).toUpperCase();
 
   // Keep the page behind the mobile overlay from scrolling while it's open.
   useEffect(() => {
@@ -69,7 +69,7 @@ export default function Sidebar({ role, username, open, onNavigate, onLogout }) 
       <aside className={`app-sidebar${open ? " app-sidebar--open" : ""}`}>
         <div className="app-sidebar__profile">
           <div className="app-sidebar__avatar">{initial}</div>
-          <div className="app-sidebar__profile-name">{username}</div>
+          <div className="app-sidebar__profile-name">{displayName}</div>
           <div className="app-sidebar__profile-role">{ROLE_LABEL[role] || role}</div>
         </div>
 

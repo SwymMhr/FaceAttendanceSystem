@@ -78,7 +78,7 @@ def _to_period_out(p: Period) -> PeriodOut:
         subject_code=p.subject.subject_code,
         subject_name=p.subject.subject_name,
         teacher_id=p.teacher_id,
-        teacher_name=p.teacher.user_name,
+        teacher_name=p.teacher.full_name or p.teacher.email,
         day_of_week=p.day_of_week,
         period_number=p.period_number,
         start_time=p.slot.start_time.strftime("%H:%M"),

@@ -14,12 +14,15 @@ class User(Base):
     __tablename__ = "tbl_users"
 
     id            = Column(Integer, primary_key=True, index=True)
-    user_name     = Column(String, unique=True, index=True, nullable=False)
     email         = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     role          = Column(String, nullable=False, default="student")
     is_active     = Column(Boolean, nullable=False, default=True)
     created_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    # Display name for teacher/admin accounts (students don't need this —
+    # their name lives on tbl_students.student_name, which is the roster's
+    # source of truth). Nullable because student accounts leave it unset.
+    full_name     = Column(String, nullable=True)
 
     __table_args__ = (
         CheckConstraint("role IN ('student','teacher','admin')", name="ck_users_role"),

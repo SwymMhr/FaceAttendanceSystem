@@ -26,7 +26,7 @@ function getPageTitle(pathname) {
   return match ? match[1] : "";
 }
 
-export default function Topbar({ username, onToggleSidebar }) {
+export default function Topbar({ displayName, onToggleSidebar }) {
   const location = useLocation();
   const [now, setNow] = useState(new Date());
 
@@ -35,7 +35,7 @@ export default function Topbar({ username, onToggleSidebar }) {
     return () => clearInterval(id);
   }, []);
 
-  const initial = (username || "?").charAt(0).toUpperCase();
+  const initial = (displayName || "?").charAt(0).toUpperCase();
   const pageTitle = getPageTitle(location.pathname);
   const timeString = now.toLocaleTimeString([], {
     hour: "numeric",
@@ -53,6 +53,12 @@ export default function Topbar({ username, onToggleSidebar }) {
         >
           <i className="bi bi-list" />
         </button>
+        <span className="app-topbar__brand">
+          Face<span>Attend</span>
+        </span>
+      </div>
+
+      <div className="app-topbar__center d-none d-sm-flex">
         <span className="app-topbar__clock">{timeString}</span>
         {pageTitle && (
           <>
@@ -63,7 +69,7 @@ export default function Topbar({ username, onToggleSidebar }) {
       </div>
 
       <div className="app-topbar__right">
-        <div className="app-topbar__avatar" title={username}>
+        <div className="app-topbar__avatar" title={displayName}>
           {initial}
         </div>
       </div>

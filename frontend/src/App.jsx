@@ -13,6 +13,9 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AdminBatches from "./pages/AdminBatches";
 import AdminSubjects from "./pages/AdminSubjects";
 import AdminUsers from "./pages/AdminUsers";
+import AddStudentPage from "./pages/AddStudentPage";
+import AddTeacherPage from "./pages/AddTeacherPage";
+import EditUserPage from "./pages/EditUserPage";
 import AdminSchedule from "./pages/AdminSchedule";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
@@ -33,7 +36,7 @@ function HomeRedirect() {
 export default function App() {
   const navigate = useNavigate();
   const loggedIn = isLoggedIn();
-  const username = localStorage.getItem("username");
+  const displayName = localStorage.getItem("displayName");
   const role = getRole();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -51,10 +54,10 @@ export default function App() {
           link either way, since accounts are admin-created. */}
       {loggedIn && (
         <>
-          <Topbar username={username} onToggleSidebar={() => setSidebarOpen((v) => !v)} />
+          <Topbar displayName={displayName} onToggleSidebar={() => setSidebarOpen((v) => !v)} />
           <Sidebar
             role={role}
-            username={username}
+            displayName={displayName}
             open={sidebarOpen}
             onNavigate={closeSidebar}
             onLogout={handleLogout}
@@ -178,6 +181,30 @@ export default function App() {
           element={
             <ProtectedRoute roles={["admin"]}>
               <AdminUsers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users/new-student"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AddStudentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users/new-teacher"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AddTeacherPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users/:userId/edit"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <EditUserPage />
             </ProtectedRoute>
           }
         />

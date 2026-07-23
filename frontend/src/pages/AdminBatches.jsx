@@ -86,7 +86,7 @@ export default function AdminBatches() {
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      <div className="panel" style={{ maxWidth: 480 }}>
+      <div className="panel">
         <h2 className="panel-title">New Batch</h2>
         <form className="d-flex gap-2" onSubmit={handleCreate}>
           <input

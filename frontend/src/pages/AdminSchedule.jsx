@@ -229,7 +229,7 @@ export default function AdminSchedule() {
                       <option value="">Select teacher...</option>
                       {teachers.map((t) => (
                         <option key={t.id} value={t.id}>
-                          {t.user_name}
+                          {t.full_name}
                         </option>
                       ))}
                     </select>

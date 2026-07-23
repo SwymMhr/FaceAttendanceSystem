@@ -91,7 +91,7 @@ export default function AdminSubjects() {
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      <div className="panel" style={{ maxWidth: 560 }}>
+      <div className="panel">
         <h2 className="panel-title">New Subject</h2>
         <form className="d-flex gap-2" onSubmit={handleCreate}>
           <input

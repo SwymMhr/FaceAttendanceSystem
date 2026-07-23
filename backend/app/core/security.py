@@ -22,7 +22,7 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
 
 def create_access_token(data: dict, expires_minutes: int | None = None) -> str:
     """
-    Builds a signed JWT. `data` typically looks like {"sub": username}.
+    Builds a signed JWT. `data` typically looks like {"sub": email}.
     The frontend stores this token and sends it back as:
         Authorization: Bearer <token>
     """

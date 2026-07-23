@@ -35,7 +35,7 @@ router = APIRouter()
 def get_embedding_count(
     student_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role("teacher", "admin")),
+    current_user=Depends(require_role("admin")),
 ):
     """How many face photos are currently registered for this student —
     used by the registration UI to show 'already has N photos' before
@@ -55,7 +55,7 @@ async def register_face(
     student_id: int = Form(...),         # existing tbl_students.id — NOT student_code
     images: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
-    current_user=Depends(require_role("teacher", "admin")),
+    current_user=Depends(require_role("admin")),
 ):
     """
     Add one or more face photos for an already-existing student, generating

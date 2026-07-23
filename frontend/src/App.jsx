@@ -113,7 +113,7 @@ export default function App() {
         <Route
           path="/teacher/enroll"
           element={
-            <ProtectedRoute roles={["teacher", "admin"]}>
+            <ProtectedRoute roles={["admin"]}>
               <RegisterFacePage />
             </ProtectedRoute>
           }

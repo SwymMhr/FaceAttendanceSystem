@@ -13,7 +13,6 @@ const NAV_BY_ROLE = {
   ],
   teacher: [
     { label: "Dashboard", path: "/teacher", icon: "bi-speedometer2", end: true },
-    { label: "Register Faces", path: "/teacher/enroll", icon: "bi-camera" },
     { label: "Live Attendance", path: "/teacher/attendance", icon: "bi-person-video2" },
     { label: "History", path: "/teacher/history", icon: "bi-clock-history" },
   ],

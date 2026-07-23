@@ -122,8 +122,21 @@ export async function getAdminOverview() {
 
 // ── Attendance logs (teacher/admin "History" page) ─────────────────────────
 
-export async function getAttendanceLogs(limit = 100) {
-  const res = await api.get(`/get_attendance_logs?limit=${limit}`);
+export async function getAttendanceLogs(filters = {}) {
+  const params = {};
+  if (filters.startDate) params.start_date = filters.startDate;
+  if (filters.endDate) params.end_date = filters.endDate;
+  if (filters.studentName) params.student_name = filters.studentName;
+  if (filters.batchId) params.batch_id = filters.batchId;
+  if (filters.teacherId) params.teacher_id = filters.teacherId;
+  params.limit = filters.limit || 100;
+
+  const res = await api.get("/get_attendance_logs", { params });
+  return res.data;
+}
+
+export async function getAttendanceFilterOptions() {
+  const res = await api.get("/attendance_filters");
   return res.data;
 }
 

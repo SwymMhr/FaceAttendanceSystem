@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, UploadFile, Depends
+from fastapi import APIRouter, File, Form, UploadFile, Depends, HTTPException
 from sqlalchemy.orm import Session
 import numpy as np
 import cv2
@@ -7,6 +7,7 @@ from io import BytesIO
 from app.services.crop_utils import crop_with_margin
 
 from app.db.database import get_db
+from app.models.db_models import Batch
 from app.services.yolo_service import detect_faces
 from app.services.recognition_service import identify_face
 from app.services.attendance_service import mark_attendance_logic
@@ -16,8 +17,11 @@ router = APIRouter()
 @router.post("/process_frame")
 async def process_frame(
     image: UploadFile = File(...),
+    batch_id: int = Form(..., description="Only students in this batch are searched/matched."),
     db: Session = Depends(get_db)
 ):
+    if not db.query(Batch).filter(Batch.id == batch_id).first():
+        raise HTTPException(status_code=404, detail="Batch not found.")
 
     # Read frame
     contents = await image.read()
@@ -37,16 +41,17 @@ async def process_frame(
             cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
         )
 
-        student, score, db_id = identify_face(pil_img, db)
+        student, score, db_id = identify_face(pil_img, db, batch_id=batch_id)
 
         if not student:
             # A face was detected in the frame, but it didn't match anyone
-            # closely enough (or there are no enrolled embeddings at all).
+            # closely enough in this batch (or there are no enrolled
+            # embeddings for this batch at all).
             results.append({
                 "name": "Unknown",
                 "confidence": round(score, 4),
                 "attendance_status": "unrecognized",
-                "message": "Face detected but not recognized as any enrolled student.",
+                "message": "Face detected but not recognized as any student enrolled in this batch.",
             })
             continue
 

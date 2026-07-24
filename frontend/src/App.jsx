@@ -17,6 +17,7 @@ import AddStudentPage from "./pages/AddStudentPage";
 import AddTeacherPage from "./pages/AddTeacherPage";
 import EditUserPage from "./pages/EditUserPage";
 import AdminSchedule from "./pages/AdminSchedule";
+import AddPeriodSlotPage from "./pages/AddPeriodSlotPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
@@ -213,6 +214,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={["admin"]}>
               <AdminSchedule />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/schedule/add-period"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AddPeriodSlotPage />
             </ProtectedRoute>
           }
         />

@@ -16,12 +16,20 @@ from app.services.model_service import (
 from PIL import Image
 
 
-def identify_face(pil_image: Image.Image, db: Session):
+def identify_face(pil_image: Image.Image, db: Session, batch_id: int | None = None):
     """
     Given a cropped face image:
       1. Compute its embedding.
-      2. Compare against every stored embedding in the database.
+      2. Compare against stored embeddings in the database — every
+         enrolled student, or (if batch_id is given) only students in
+         that batch.
       3. Return (Student | None, best_score, student_id_int | None).
+
+    Scoping to a batch isn't just a performance shortcut — it's what lets
+    a camera session declare "this is Batch A's class right now" and
+    have that actually mean something: a lookalike from a different
+    batch can never be matched while a batch is selected, and the pool
+    of candidates searched is smaller too.
 
     If the best score is below VERIFICATION_THRESHOLD (computed during
     training, not a hand-picked guess), the face is 'Unknown'.
@@ -29,8 +37,11 @@ def identify_face(pil_image: Image.Image, db: Session):
     # Step 1 — compute embedding for the incoming face
     query_vec = get_embedding(pil_image)
 
-    # Step 2 — load all stored embeddings from DB
-    all_embeddings = db.query(Embedding).all()
+    # Step 2 — load stored embeddings, scoped to a batch if one was given
+    query = db.query(Embedding)
+    if batch_id is not None:
+        query = query.join(Student, Embedding.student_id == Student.id).filter(Student.batch_id == batch_id)
+    all_embeddings = query.all()
 
     if not all_embeddings:
         return None, 0.0, None

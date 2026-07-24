@@ -18,7 +18,7 @@ from app.models.db_models import Period, PeriodSlot
 from app.services.absence_service import finalize_period_absentees
 
 LOCAL_TZ = ZoneInfo("Asia/Kathmandu")
-_WEEKDAY_MAP = {6: "SUNDAY", 0: "MONDAY", 1: "TUESDAY", 2: "WEDNESDAY", 3: "THURSDAY"}
+_WEEKDAY_MAP = {6: "SUNDAY", 0: "MONDAY", 1: "TUESDAY", 2: "WEDNESDAY", 3: "THURSDAY", 4: "FRIDAY"}
 
 # Tracks the local date this job last ran an end-of-day finalize for, so we
 # don't re-run the same query every 5 minutes for the rest of the evening.

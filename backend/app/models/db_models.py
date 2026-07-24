@@ -3,7 +3,7 @@
 
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Date, Time, DateTime,
-    ForeignKey, Text, CheckConstraint, UniqueConstraint
+    ForeignKey, ForeignKeyConstraint, Text, CheckConstraint, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -49,7 +49,8 @@ class Batch(Base):
     # further into tbl_attendance (period_id is also ON DELETE CASCADE).
     # passive_deletes=True lets Postgres run that whole chain in one
     # statement instead of SQLAlchemy trying to manage each level itself.
-    periods  = relationship("Period", back_populates="batch", passive_deletes=True)
+    periods      = relationship("Period", back_populates="batch", passive_deletes=True)
+    period_slots = relationship("PeriodSlot", back_populates="batch", passive_deletes=True)
 
 
 class Student(Base):
@@ -95,25 +96,41 @@ class Subject(Base):
 
 class PeriodSlot(Base):
     """
-    The 4 fixed, non-editable daily time slots. Every batch uses these
-    exact same clock-time windows — admins pick a slot number here,
-    they never enter custom start/end times.
+    A batch's own daily period times — e.g. Batch A's period #1 might be
+    07:00-08:45 while Batch B's period #1 is 09:00-10:00. Each batch
+    defines its own set of slots (however many it needs) through the
+    admin UI instead of everyone sharing 4 fixed global times.
     """
     __tablename__ = "tbl_period_slots"
 
-    period_number = Column(Integer, primary_key=True)  # 1-4
+    id            = Column(Integer, primary_key=True, index=True)
+    batch_id      = Column(Integer, ForeignKey("tbl_batches.id", ondelete="CASCADE"), nullable=False)
+    period_number = Column(Integer, nullable=False)  # scoped to batch_id, not global — 1..N per batch
     start_time    = Column(Time, nullable=False)
     end_time      = Column(Time, nullable=False)
 
+    __table_args__ = (
+        UniqueConstraint("batch_id", "period_number", name="uq_batch_period_number"),
+        CheckConstraint("end_time > start_time", name="ck_slot_time_order"),
+    )
+
+    batch   = relationship("Batch", back_populates="period_slots")
     periods = relationship("Period", back_populates="slot")
 
 
 class Period(Base):
     """
     THE timetable engine. One row = this batch, on this weekday, in this
-    fixed slot, teaching this subject, taught by this teacher. Since
-    every slot is identical clock time across all batches, "same
-    teacher + same day + same slot" is a complete double-booking check.
+    slot, teaching this subject, taught by this teacher.
+
+    period_number now only means something in combination with batch_id
+    (see PeriodSlot) — two different batches can have completely
+    different clock times for "period #1". Because of that, teacher
+    double-booking can no longer be checked with a simple unique
+    constraint (same period_number across batches might not be the same
+    real time, and different period_numbers might overlap) — that check
+    now happens in application code (see schedule.py's _check_conflicts),
+    comparing each candidate slot's actual start/end time.
     """
     __tablename__ = "tbl_periods"
 
@@ -121,17 +138,25 @@ class Period(Base):
     batch_id      = Column(Integer, ForeignKey("tbl_batches.id", ondelete="CASCADE"), nullable=False)
     subject_id    = Column(Integer, ForeignKey("tbl_subjects.id", ondelete="CASCADE"), nullable=False)
     teacher_id    = Column(Integer, ForeignKey("tbl_users.id", ondelete="CASCADE"), nullable=False)
-    period_number = Column(Integer, ForeignKey("tbl_period_slots.period_number"), nullable=False)
+    period_number = Column(Integer, nullable=False)
     day_of_week   = Column(String, nullable=False)
     created_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(
-            "day_of_week IN ('SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY')",
+            "day_of_week IN ('SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY')",
             name="ck_period_weekday",
         ),
         UniqueConstraint("batch_id", "day_of_week", "period_number", name="uq_batch_slot"),
-        UniqueConstraint("teacher_id", "day_of_week", "period_number", name="uq_teacher_slot"),
+        # Composite FK instead of a plain one on period_number alone — this
+        # is what actually enforces "this period's slot must belong to
+        # this same batch" at the database level.
+        ForeignKeyConstraint(
+            ["batch_id", "period_number"],
+            ["tbl_period_slots.batch_id", "tbl_period_slots.period_number"],
+            ondelete="CASCADE",
+            name="fk_periods_batch_slot",
+        ),
     )
 
     batch       = relationship("Batch", back_populates="periods")

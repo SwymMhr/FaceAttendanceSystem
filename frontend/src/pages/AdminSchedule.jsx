@@ -1,26 +1,34 @@
 import { useEffect, useState } from "react";
+import { useSearchParams, Link } from "react-router-dom";
 import {
   getBatches,
   getSubjects,
   getUsers,
-  getPeriodSlots,
+  getBatchPeriodSlots,
+  deletePeriodSlot,
   getBatchTimetable,
   createPeriod,
   deletePeriod,
 } from "../api";
 import PageHeader from "../components/PageHeader";
 
-const DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY"];
+const DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
 
 const emptyForm = { subject_id: "", teacher_id: "", day_of_week: "SUNDAY", period_number: "" };
 
 export default function AdminSchedule() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [batches, setBatches] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [slots, setSlots] = useState([]);
 
-  const [selectedBatchId, setSelectedBatchId] = useState("");
+  // Batch selection lives in the URL (?batch=id) so links from/to the
+  // Add Period page round-trip back to the same batch.
+  const selectedBatchId = searchParams.get("batch") || "";
+  const setSelectedBatchId = (id) => setSearchParams(id ? { batch: id } : {});
+
   const [timetable, setTimetable] = useState([]);
 
   const [loading, setLoading] = useState(true);
@@ -34,17 +42,17 @@ export default function AdminSchedule() {
   useEffect(() => {
     const loadRefData = async () => {
       try {
-        const [batchData, subjectData, teacherData, slotData] = await Promise.all([
+        const [batchData, subjectData, teacherData] = await Promise.all([
           getBatches(),
           getSubjects(),
           getUsers("teacher"),
-          getPeriodSlots(),
         ]);
         setBatches(batchData);
         setSubjects(subjectData);
         setTeachers(teacherData);
-        setSlots(slotData);
-        if (batchData.length > 0) setSelectedBatchId(String(batchData[0].id));
+        if (!selectedBatchId && batchData.length > 0) {
+          setSelectedBatchId(String(batchData[0].id));
+        }
       } catch (err) {
         setError(err.response?.data?.detail || "Failed to load reference data.");
       } finally {
@@ -52,20 +60,28 @@ export default function AdminSchedule() {
       }
     };
     loadRefData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchTimetable = async (batchId) => {
+  // Slots and the timetable are both scoped to whichever batch is selected —
+  // refetch both whenever it changes.
+  const fetchSlotsAndTimetable = async (batchId) => {
     if (!batchId) return;
     try {
-      const data = await getBatchTimetable(batchId);
-      setTimetable(data);
+      const [slotData, timetableData] = await Promise.all([
+        getBatchPeriodSlots(batchId),
+        getBatchTimetable(batchId),
+      ]);
+      setSlots(slotData);
+      setTimetable(timetableData);
     } catch (err) {
-      setError(err.response?.data?.detail || "Failed to load timetable.");
+      setError(err.response?.data?.detail || "Failed to load this batch's schedule.");
     }
   };
 
   useEffect(() => {
-    fetchTimetable(selectedBatchId);
+    fetchSlotsAndTimetable(selectedBatchId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBatchId]);
 
   const cellFor = (day, periodNumber) =>
@@ -93,10 +109,11 @@ export default function AdminSchedule() {
       });
       setShowForm(false);
       setForm(emptyForm);
-      await fetchTimetable(selectedBatchId);
+      await fetchSlotsAndTimetable(selectedBatchId);
     } catch (err) {
       // Conflict (409) or validation errors surface here, e.g. "This batch
-      // already has 'X' in that slot" or "This teacher is already teaching...".
+      // already has 'X' in that slot" or "This teacher is already
+      // teaching... which overlaps this slot".
       setError(err.response?.data?.detail || "Failed to assign period.");
     } finally {
       setSaving(false);
@@ -110,9 +127,25 @@ export default function AdminSchedule() {
     setError("");
     try {
       await deletePeriod(period.id);
-      await fetchTimetable(selectedBatchId);
+      await fetchSlotsAndTimetable(selectedBatchId);
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to remove period.");
+    }
+  };
+
+  const handleDeleteSlot = async (slot) => {
+    const inUse = timetable.some((p) => p.period_number === slot.period_number);
+    const warning = inUse
+      ? `Period #${slot.period_number} (${slot.start_time}\u2013${slot.end_time}) has classes assigned across the week. Removing it will also remove ALL of those. Continue?`
+      : `Remove period #${slot.period_number} (${slot.start_time}\u2013${slot.end_time})?`;
+    if (!window.confirm(warning)) return;
+
+    setError("");
+    try {
+      await deletePeriodSlot(slot.id);
+      await fetchSlotsAndTimetable(selectedBatchId);
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to remove period slot.");
     }
   };
 
@@ -124,7 +157,7 @@ export default function AdminSchedule() {
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      <div className="panel d-flex align-items-center gap-2">
+      <div className="panel d-flex align-items-center gap-2 flex-wrap">
         <label className="mb-0">Batch:</label>
         <select
           className="form-select"
@@ -141,16 +174,30 @@ export default function AdminSchedule() {
         {batches.length === 0 && (
           <span className="text-muted">Create a batch first.</span>
         )}
+
+        {selectedBatchId && (
+          <Link
+            to={`/admin/schedule/add-period?batch=${selectedBatchId}`}
+            className="btn btn-primary ms-auto"
+          >
+            + Add Period
+          </Link>
+        )}
       </div>
 
       {selectedBatchId && (
         <>
           <div className="panel">
+          {slots.length === 0 ? (
+            <div className="empty-state">
+              This batch has no period times yet. Click <strong>+ Add Period</strong> above to create its first one.
+            </div>
+          ) : (
           <div className="table-responsive">
             <table className="table table-bordered text-center align-middle mb-0">
               <thead>
                 <tr>
-                  <th style={{ width: 140 }}>Period</th>
+                  <th style={{ width: 150 }}>Period</th>
                   {DAYS.map((d) => (
                     <th key={d}>{d[0] + d.slice(1).toLowerCase()}</th>
                   ))}
@@ -158,12 +205,18 @@ export default function AdminSchedule() {
               </thead>
               <tbody>
                 {slots.map((slot) => (
-                  <tr key={slot.period_number}>
+                  <tr key={slot.id}>
                     <td>
                       <div>#{slot.period_number}</div>
-                      <small className="text-muted">
+                      <small className="text-muted d-block">
                         {slot.start_time}–{slot.end_time}
                       </small>
+                      <button
+                        className="btn btn-sm btn-link text-danger p-0"
+                        onClick={() => handleDeleteSlot(slot)}
+                      >
+                        Remove slot
+                      </button>
                     </td>
                     {DAYS.map((day) => {
                       const period = cellFor(day, slot.period_number);
@@ -196,6 +249,7 @@ export default function AdminSchedule() {
               </tbody>
             </table>
           </div>
+          )}
           </div>
 
           {showForm && (

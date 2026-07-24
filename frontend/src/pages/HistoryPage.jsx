@@ -73,7 +73,6 @@ export default function HistoryPage() {
     <div className="page">
       <PageHeader
         title="Attendance History"
-        subtitle="Filter by date range, student, batch, or teacher."
       />
 
       {error && <div className="alert alert-danger">{error}</div>}

@@ -250,8 +250,21 @@ export async function registerFace(studentId, images) {
 
 // ── Admin: Schedule (period slots + periods/timetable) ───────────────────────
 
-export async function getPeriodSlots() {
-  const res = await api.get("/admin/period-slots");
+export async function getBatchPeriodSlots(batchId) {
+  const res = await api.get(`/admin/batches/${batchId}/period-slots`);
+  return res.data;
+}
+
+export async function createPeriodSlot(batchId, payload) {
+  // payload: { start_time: "HH:MM", end_time: "HH:MM" }
+  // period_number is assigned automatically by the backend (next available
+  // for that batch) — no need to pass it.
+  const res = await api.post(`/admin/batches/${batchId}/period-slots`, payload);
+  return res.data;
+}
+
+export async function deletePeriodSlot(slotId) {
+  const res = await api.delete(`/admin/period-slots/${slotId}`);
   return res.data;
 }
 

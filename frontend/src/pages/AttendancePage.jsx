@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import API from "../api";
+import { useEffect, useRef, useState } from "react";
+import API, { getBatches, getTeacherBatches, getRole } from "../api";
 import PageHeader from "../components/PageHeader";
 
 // Maps the backend's attendance_status to a Bootstrap badge color. A
@@ -14,10 +14,49 @@ const STATUS_BADGE = {
 
 export default function AttendancePage() {
   const videoRef = useRef(null);
+
+  const [batches, setBatches] = useState([]);
+  const [batchId, setBatchId] = useState("");
+
   const [cameraOn, setCameraOn] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    // Admins can run live attendance for any batch; teachers should only
+    // see (and only be able to pick) batches they're actually assigned to
+    // teach — /admin/batches is admin-only and would 403 for a teacher.
+    const role = getRole();
+    const loadBatches = role === "admin" ? getBatches() : getTeacherBatches();
+
+    loadBatches
+      .then((data) => {
+        // /admin/batches returns {id, batch_name}; /teacher/me/batches
+        // returns {batch_id, batch_name} — normalize to one shape.
+        const normalized = data.map((b) => ({
+          id: b.id ?? b.batch_id,
+          batch_name: b.batch_name,
+        }));
+        setBatches(normalized);
+      })
+      .catch((err) => setError(err.response?.data?.detail || "Failed to load batches."));
+  }, []);
+
+  // Switching batches mid-session means the previous results (and any
+  // camera stream) belonged to a different class — clear them so nothing
+  // from the old batch lingers on screen or gets attributed to the new one.
+  const handleBatchChange = (newBatchId) => {
+    setBatchId(newBatchId);
+    setResults(null);
+    setError("");
+    const video = videoRef.current;
+    if (video?.srcObject) {
+      video.srcObject.getTracks().forEach((track) => track.stop());
+      video.srcObject = null;
+    }
+    setCameraOn(false);
+  };
 
   const startCamera = async () => {
     setError("");
@@ -31,6 +70,11 @@ export default function AttendancePage() {
   };
 
   const captureFrame = () => {
+    if (!batchId) {
+      setError("Select a batch before capturing — recognition is scoped to one batch at a time.");
+      return;
+    }
+
     const video = videoRef.current;
     if (!video || !video.videoWidth) {
       setError("Camera isn't ready yet — start the camera first.");
@@ -50,6 +94,7 @@ export default function AttendancePage() {
       try {
         const formData = new FormData();
         formData.append("image", blob, "frame.jpg");
+        formData.append("batch_id", batchId);
 
         const res = await API.post("/process_frame", formData, {
           headers: { "Content-Type": "multipart/form-data" },
@@ -65,19 +110,49 @@ export default function AttendancePage() {
 
   return (
     <div className="page">
-      <PageHeader title="Live Attendance" />
+      <PageHeader
+        title="Live Attendance"
+        subtitle="Select the batch currently in front of the camera — recognition only matches students in that batch."
+      />
 
       {error && <div className="alert alert-danger">{error}</div>}
 
       <div className="panel">
+        <div className="mb-3" style={{ maxWidth: 320 }}>
+          <label className="form-label">Batch</label>
+          <select
+            className="form-select"
+            value={batchId}
+            onChange={(e) => handleBatchChange(e.target.value)}
+          >
+            <option value="">Select batch...</option>
+            {batches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.batch_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="d-flex gap-2 mb-3">
-          <button className="btn btn-primary" onClick={startCamera} disabled={cameraOn}>
+          <button
+            className="btn btn-primary"
+            onClick={startCamera}
+            disabled={cameraOn || !batchId}
+          >
             {cameraOn ? "Camera On" : "Start Camera"}
           </button>
           <button className="btn btn-success" onClick={captureFrame} disabled={!cameraOn || capturing}>
             {capturing ? "Processing..." : "Capture Frame"}
           </button>
         </div>
+        {!batchId && (
+          <div className="small text-muted mb-3">
+            {batches.length === 0
+              ? "You're not assigned to teach any batch yet — check with an admin."
+              : "Select a batch above to enable the camera."}
+          </div>
+        )}
 
         <div style={{ maxWidth: 480 }}>
           <video ref={videoRef} autoPlay playsInline className="w-100 rounded border" />

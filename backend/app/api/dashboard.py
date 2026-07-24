@@ -16,7 +16,7 @@ from app.api.deps import require_role
 from app.services.attendance_service import set_attendance_status
 
 LOCAL_TZ = ZoneInfo("Asia/Kathmandu")
-_WEEKDAY_MAP = {6: "SUNDAY", 0: "MONDAY", 1: "TUESDAY", 2: "WEDNESDAY", 3: "THURSDAY"}
+_WEEKDAY_MAP = {6: "SUNDAY", 0: "MONDAY", 1: "TUESDAY", 2: "WEDNESDAY", 3: "THURSDAY", 4: "FRIDAY"}
 
 
 def _today_local() -> date_type:

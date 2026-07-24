@@ -15,7 +15,7 @@ from app.models.db_models import Student, Period, PeriodSlot, Attendance
 LOCAL_TZ = ZoneInfo("Asia/Kathmandu")
 
 # Python's date.weekday(): Monday=0 ... Sunday=6
-_WEEKDAY_MAP = {6: "SUNDAY", 0: "MONDAY", 1: "TUESDAY", 2: "WEDNESDAY", 3: "THURSDAY"}
+_WEEKDAY_MAP = {6: "SUNDAY", 0: "MONDAY", 1: "TUESDAY", 2: "WEDNESDAY", 3: "THURSDAY", 4: "FRIDAY"}
 # Friday=4, Saturday=5 intentionally absent — those are weekends, no periods run.
 
 
@@ -34,11 +34,15 @@ def get_current_period(db: Session, batch_id: int, at: datetime | None = None) -
     current_time = now_local.time()
     slot = (
         db.query(PeriodSlot)
-          .filter(PeriodSlot.start_time <= current_time, PeriodSlot.end_time > current_time)
+          .filter(
+              PeriodSlot.batch_id == batch_id,
+              PeriodSlot.start_time <= current_time,
+              PeriodSlot.end_time > current_time,
+          )
           .first()
     )
     if not slot:
-        return None  # before 7:00, after 14:30, or in the 10:30-11:00 break
+        return None  # outside this batch's school hours, or during a break between its slots
 
     return (
         db.query(Period)

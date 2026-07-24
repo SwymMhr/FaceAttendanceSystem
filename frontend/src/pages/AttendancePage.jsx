@@ -10,6 +10,7 @@ const STATUS_BADGE = {
   skipped: "bg-warning text-dark",
   error: "bg-danger",
   unrecognized: "bg-secondary",
+  rejected: "bg-danger text-white",
 };
 
 export default function AttendancePage() {

@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str
     SMTP_FROM_EMAIL: str
 
+    # ── Liveness detection ────────────────────────────────────────────────
+    LIVENESS_ENABLED: bool = True
+    LIVENESS_MIN_CHECKS_TO_FAIL: int = 2
+
     class Config:
         # Tell pydantic-settings to read from your .env file
         env_file = ".env"

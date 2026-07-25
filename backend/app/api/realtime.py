@@ -36,20 +36,20 @@ async def process_frame(
 
     for (x1, y1, x2, y2) in faces:
 
-        face_crop = crop_with_margin(frame, (x1, y1, x2, y2))
+        # ── CNN liveness check (full frame + YOLO bbox) ──────────────
+        face_bbox = (int(x1), int(y1), int(x2 - x1), int(y2 - y1))
+        liveness = check_liveness(frame, face_bbox=face_bbox)
 
-        # ── liveness check ───────────────────────────────────────────
-        liveness = check_liveness(face_crop)
         if not liveness["is_live"]:
             results.append({
                 "name": "Spoof Detected",
                 "confidence": 0.0,
                 "attendance_status": "rejected",
-                "message": f"Anti-spoofing failed ({liveness['spoof_type']}): "
-                           f"failed checks={liveness['failed']}",
+                "message": f"Anti-spoofing failed (confidence={liveness['confidence']:.0%})",
             })
             continue
 
+        face_crop = crop_with_margin(frame, (x1, y1, x2, y2))
         pil_img = Image.fromarray(
             cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
         )

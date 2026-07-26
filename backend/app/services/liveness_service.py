@@ -1,127 +1,411 @@
 # app/services/liveness_service.py
-# Lightweight OpenCV-based anti-spoofing detector.
-# 5 checks: specular highlights, edge sharpness, color anomaly, reflection patterns, texture.
+# CNN-based anti-spoofing using Silent-Face-Anti-Spoofing pretrained models.
+# Uses RetinaFace for face detection + MiniFASNetV2/V1SE for liveness classification.
 
+import os
+import math
 import cv2
 import numpy as np
+import torch
+import torch.nn.functional as F
+from collections import OrderedDict
+from torch.nn import (
+    Linear, Conv2d, BatchNorm1d, BatchNorm2d, PReLU, ReLU, Sigmoid,
+    AdaptiveAvgPool2d, Sequential, Module,
+)
 
+# ══════════════════════════════════════════════════════════════════════════
+# MiniFASNet architecture (from Silent-Face-Anti-Spoofing)
+# ══════════════════════════════════════════════════════════════════════════
 
-class AntiSpoofingDetector:
-    """
-    Lightweight anti-spoofing detector using OpenCV.
-    Designed for real-time performance with minimal false positives.
-    """
+class Flatten(Module):
+    def forward(self, input):
+        return input.view(input.size(0), -1)
 
-    def __init__(self, config=None):
-        self.config = {
-            "specular_threshold": 0.005,
-            "specular_intensity": 215,
-            "edge_sharpness_max": 45,
-            "color_blue_shift_max": 1.05,
-            "reflection_variance_min": 50,
-            "texture_laplacian_min": 80.0,
-            "min_checks_to_fail": 2,
-            "enabled": True,
-        }
-        if config:
-            self.config.update(config)
+class Conv_block(Module):
+    def __init__(self, in_c, out_c, kernel=(1,1), stride=(1,1), padding=(0,0), groups=1):
+        super(Conv_block, self).__init__()
+        self.conv = Conv2d(in_c, out_c, kernel_size=kernel, groups=groups,
+                           stride=stride, padding=padding, bias=False)
+        self.bn = BatchNorm2d(out_c)
+        self.prelu = PReLU(out_c)
+    def forward(self, x):
+        return self.prelu(self.bn(self.conv(x)))
 
-    # ── individual checks ────────────────────────────────────────────────
+class Linear_block(Module):
+    def __init__(self, in_c, out_c, kernel=(1,1), stride=(1,1), padding=(0,0), groups=1):
+        super(Linear_block, self).__init__()
+        self.conv = Conv2d(in_c, out_channels=out_c, kernel_size=kernel,
+                           groups=groups, stride=stride, padding=padding, bias=False)
+        self.bn = BatchNorm2d(out_c)
+    def forward(self, x):
+        return self.bn(self.conv(x))
 
-    def detect_specular_highlights(self, face_bgr):
-        hsv = cv2.cvtColor(face_bgr, cv2.COLOR_BGR2HSV)
-        v = hsv[:, :, 2]
-        t = self.config["specular_intensity"]
-        bright_ratio = float(np.sum(v > t)) / v.size
-        _, mask = cv2.threshold(v, t, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        regions = sum(1 for c in contours if cv2.contourArea(c) > 20)
-        spoof = bright_ratio > self.config["specular_threshold"] or regions >= 3
-        return spoof, bright_ratio, {"bright_ratio": bright_ratio, "bright_regions": regions}
+class Depth_Wise(Module):
+    def __init__(self, c1, c2, c3, residual=False, kernel=(3,3), stride=(2,2), padding=(1,1), groups=1):
+        super(Depth_Wise, self).__init__()
+        c1_in, c1_out = c1
+        c2_in, c2_out = c2
+        c3_in, c3_out = c3
+        self.conv = Conv_block(c1_in, c1_out, kernel=(1,1), padding=(0,0), stride=(1,1))
+        self.conv_dw = Conv_block(c2_in, c2_out, groups=c2_in, kernel=kernel, padding=padding, stride=stride)
+        self.project = Linear_block(c3_in, c3_out, kernel=(1,1), padding=(0,0), stride=(1,1))
+        self.residual = residual
+    def forward(self, x):
+        short_cut = x if self.residual else None
+        x = self.project(self.conv_dw(self.conv(x)))
+        return short_cut + x if self.residual else x
 
-    def detect_edge_sharpness(self, face_gray):
-        lap = cv2.Laplacian(face_gray, cv2.CV_64F)
-        score = float(np.abs(lap).mean())
-        return score > self.config["edge_sharpness_max"], score, {"edge_mean": score}
+class Residual(Module):
+    def __init__(self, c1, c2, c3, num_block, groups, kernel=(3,3), stride=(1,1), padding=(1,1)):
+        super(Residual, self).__init__()
+        modules = []
+        for i in range(num_block):
+            modules.append(Depth_Wise(c1[i], c2[i], c3[i], residual=True,
+                kernel=kernel, padding=padding, stride=stride, groups=groups))
+        self.model = Sequential(*modules)
+    def forward(self, x):
+        return self.model(x)
 
-    def detect_color_anomaly(self, face_bgr):
-        b, g, r = cv2.split(face_bgr)
-        bm, gm, rm = float(np.mean(b)), float(np.mean(g)), float(np.mean(r))
-        blue_ratio = bm / ((rm + gm) / 2 + 1e-6)
-        total = b.size
-        clipped = (
-            (np.sum(b < 10) + np.sum(g < 10) + np.sum(r < 10))
-            + (np.sum(b > 250) + np.sum(g > 250) + np.sum(r > 250))
-        ) / (3 * total)
-        spoof = blue_ratio > self.config["color_blue_shift_max"] or clipped > 0.08
-        return spoof, blue_ratio, {"blue_ratio": blue_ratio, "clipping_ratio": clipped}
+class SEModule(Module):
+    def __init__(self, channels, reduction):
+        super(SEModule, self).__init__()
+        self.avg_pool = AdaptiveAvgPool2d(1)
+        self.fc1 = Conv2d(channels, channels // reduction, kernel_size=1, padding=0, bias=False)
+        self.bn1 = BatchNorm2d(channels // reduction)
+        self.relu = ReLU(inplace=True)
+        self.fc2 = Conv2d(channels // reduction, channels, kernel_size=1, padding=0, bias=False)
+        self.bn2 = BatchNorm2d(channels)
+        self.sigmoid = Sigmoid()
+    def forward(self, x):
+        module_input = x
+        x = self.avg_pool(x)
+        x = self.relu(self.bn1(self.fc1(x)))
+        x = self.sigmoid(self.bn2(self.fc2(x)))
+        return module_input * x
 
-    def detect_reflection_pattern(self, face_gray):
-        h, w = face_gray.shape
-        regions = []
-        for i in range(3):
-            for j in range(3):
-                y1, y2 = i * h // 3, (i + 1) * h // 3
-                x1, x2 = j * w // 3, (j + 1) * w // 3
-                regions.append(float(np.mean(face_gray[y1:y2, x1:x2])))
-        var = float(np.var(regions))
-        return var < self.config["reflection_variance_min"], var, {"region_variance": var}
+class Depth_Wise_SE(Module):
+    def __init__(self, c1, c2, c3, residual=False, kernel=(3,3), stride=(2,2), padding=(1,1), groups=1, se_reduct=8):
+        super(Depth_Wise_SE, self).__init__()
+        c1_in, c1_out = c1
+        c2_in, c2_out = c2
+        c3_in, c3_out = c3
+        self.conv = Conv_block(c1_in, c1_out, kernel=(1,1), padding=(0,0), stride=(1,1))
+        self.conv_dw = Conv_block(c2_in, c2_out, groups=c2_in, kernel=kernel, padding=padding, stride=stride)
+        self.project = Linear_block(c3_in, c3_out, kernel=(1,1), padding=(0,0), stride=(1,1))
+        self.residual = residual
+        self.se_module = SEModule(c3_out, se_reduct)
+    def forward(self, x):
+        short_cut = x if self.residual else None
+        x = self.project(self.conv_dw(self.conv(x)))
+        if self.residual:
+            x = self.se_module(x)
+            return short_cut + x
+        return x
 
-    def detect_texture_analysis(self, face_gray):
-        resized = cv2.resize(face_gray, (100, 100))
-        val = float(cv2.Laplacian(resized, cv2.CV_64F).var())
-        return val < self.config["texture_laplacian_min"], val, {"texture_val": val}
-
-    # ── main entry point ─────────────────────────────────────────────────
-
-    def check_liveness(self, face_bgr):
-        if not self.config["enabled"]:
-            return self._result(True, 1.0, "none", {})
-
-        if face_bgr.shape[0] < 50 or face_bgr.shape[1] < 50:
-            return self._result(True, 0.5, "unknown", {})
-
-        gray = cv2.cvtColor(face_bgr, cv2.COLOR_BGR2GRAY)
-        failed = []
-        scores = {}
-
-        for name, fn, args in [
-            ("specular",    self.detect_specular_highlights, (face_bgr,)),
-            ("sharpness",   self.detect_edge_sharpness,      (gray,)),
-            ("color",       self.detect_color_anomaly,       (face_bgr,)),
-            ("reflection",  self.detect_reflection_pattern,  (gray,)),
-            ("texture",     self.detect_texture_analysis,    (gray,)),
-        ]:
-            spoof, score, _ = fn(*args)
-            scores[name] = score
-            if spoof:
-                failed.append(name)
-
-        is_live = len(failed) < self.config["min_checks_to_fail"]
-        confidence = (5 - len(failed)) / 5
-        spoof_type = "none"
-        if not is_live:
-            if "specular" in failed or "color" in failed:
-                spoof_type = "screen"
-            elif "reflection" in failed or "texture" in failed:
-                spoof_type = "print"
+class ResidualSE(Module):
+    def __init__(self, c1, c2, c3, num_block, groups, kernel=(3,3), stride=(1,1), padding=(1,1), se_reduct=4):
+        super(ResidualSE, self).__init__()
+        modules = []
+        for i in range(num_block):
+            if i == num_block - 1:
+                modules.append(Depth_Wise_SE(c1[i], c2[i], c3[i], residual=True,
+                    kernel=kernel, padding=padding, stride=stride, groups=groups, se_reduct=se_reduct))
             else:
-                spoof_type = "unknown"
-        return self._result(is_live, confidence, spoof_type, scores, failed)
+                modules.append(Depth_Wise(c1[i], c2[i], c3[i], residual=True,
+                    kernel=kernel, padding=padding, stride=stride, groups=groups))
+        self.model = Sequential(*modules)
+    def forward(self, x):
+        return self.model(x)
 
+class MiniFASNet(Module):
+    def __init__(self, keep, embedding_size, conv6_kernel=(7,7), drop_p=0.0, num_classes=3, img_channel=3):
+        super(MiniFASNet, self).__init__()
+        self.embedding_size = embedding_size
+        self.conv1 = Conv_block(img_channel, keep[0], kernel=(3,3), stride=(2,2), padding=(1,1))
+        self.conv2_dw = Conv_block(keep[0], keep[1], kernel=(3,3), stride=(1,1), padding=(1,1), groups=keep[1])
+        self.conv_23 = Depth_Wise(
+            (keep[1], keep[2]), (keep[2], keep[3]), (keep[3], keep[4]),
+            kernel=(3,3), stride=(2,2), padding=(1,1), groups=keep[3])
+        c1 = [(keep[4], keep[5]), (keep[7], keep[8]), (keep[10], keep[11]), (keep[13], keep[14])]
+        c2 = [(keep[5], keep[6]), (keep[8], keep[9]), (keep[11], keep[12]), (keep[14], keep[15])]
+        c3 = [(keep[6], keep[7]), (keep[9], keep[10]), (keep[12], keep[13]), (keep[15], keep[16])]
+        self.conv_3 = Residual(c1, c2, c3, num_block=4, groups=keep[4], kernel=(3,3), stride=(1,1), padding=(1,1))
+        self.conv_34 = Depth_Wise(
+            (keep[16], keep[17]), (keep[17], keep[18]), (keep[18], keep[19]),
+            kernel=(3,3), stride=(2,2), padding=(1,1), groups=keep[19])
+        c1 = [(keep[19], keep[20]), (keep[22], keep[23]), (keep[25], keep[26]), (keep[28], keep[29]),
+              (keep[31], keep[32]), (keep[34], keep[35])]
+        c2 = [(keep[20], keep[21]), (keep[23], keep[24]), (keep[26], keep[27]), (keep[29], keep[30]),
+              (keep[32], keep[33]), (keep[35], keep[36])]
+        c3 = [(keep[21], keep[22]), (keep[24], keep[25]), (keep[27], keep[28]), (keep[30], keep[31]),
+              (keep[33], keep[34]), (keep[36], keep[37])]
+        self.conv_4 = Residual(c1, c2, c3, num_block=6, groups=keep[19], kernel=(3,3), stride=(1,1), padding=(1,1))
+        self.conv_45 = Depth_Wise(
+            (keep[37], keep[38]), (keep[38], keep[39]), (keep[39], keep[40]),
+            kernel=(3,3), stride=(2,2), padding=(1,1), groups=keep[40])
+        c1 = [(keep[40], keep[41]), (keep[43], keep[44])]
+        c2 = [(keep[41], keep[42]), (keep[44], keep[45])]
+        c3 = [(keep[42], keep[43]), (keep[45], keep[46])]
+        self.conv_5 = Residual(c1, c2, c3, num_block=2, groups=keep[40], kernel=(3,3), stride=(1,1), padding=(1,1))
+        self.conv_6_sep = Conv_block(keep[46], keep[47], kernel=(1,1), stride=(1,1), padding=(0,0))
+        self.conv_6_dw = Linear_block(keep[47], keep[48], groups=keep[48], kernel=conv6_kernel, stride=(1,1), padding=(0,0))
+        self.conv_6_flatten = Flatten()
+        self.linear = Linear(512, embedding_size, bias=False)
+        self.bn = BatchNorm1d(embedding_size)
+        self.drop = torch.nn.Dropout(p=drop_p)
+        self.prob = Linear(embedding_size, num_classes, bias=False)
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.conv2_dw(out)
+        out = self.conv_23(out)
+        out = self.conv_3(out)
+        out = self.conv_34(out)
+        out = self.conv_4(out)
+        out = self.conv_45(out)
+        out = self.conv_5(out)
+        out = self.conv_6_sep(out)
+        out = self.conv_6_dw(out)
+        out = self.conv_6_flatten(out)
+        if self.embedding_size != 512:
+            out = self.linear(out)
+        out = self.bn(out)
+        out = self.drop(out)
+        out = self.prob(out)
+        return out
+
+class MiniFASNetSE(MiniFASNet):
+    def __init__(self, keep, embedding_size, conv6_kernel=(7,7), drop_p=0.75, num_classes=3, img_channel=3):
+        super(MiniFASNetSE, self).__init__(keep=keep, embedding_size=embedding_size,
+            conv6_kernel=conv6_kernel, drop_p=drop_p, num_classes=num_classes, img_channel=img_channel)
+        c1 = [(keep[4], keep[5]), (keep[7], keep[8]), (keep[10], keep[11]), (keep[13], keep[14])]
+        c2 = [(keep[5], keep[6]), (keep[8], keep[9]), (keep[11], keep[12]), (keep[14], keep[15])]
+        c3 = [(keep[6], keep[7]), (keep[9], keep[10]), (keep[12], keep[13]), (keep[15], keep[16])]
+        self.conv_3 = ResidualSE(c1, c2, c3, num_block=4, groups=keep[4], kernel=(3,3), stride=(1,1), padding=(1,1))
+        c1 = [(keep[19], keep[20]), (keep[22], keep[23]), (keep[25], keep[26]), (keep[28], keep[29]),
+              (keep[31], keep[32]), (keep[34], keep[35])]
+        c2 = [(keep[20], keep[21]), (keep[23], keep[24]), (keep[26], keep[27]), (keep[29], keep[30]),
+              (keep[32], keep[33]), (keep[35], keep[36])]
+        c3 = [(keep[21], keep[22]), (keep[24], keep[25]), (keep[27], keep[28]), (keep[30], keep[31]),
+              (keep[33], keep[34]), (keep[36], keep[37])]
+        self.conv_4 = ResidualSE(c1, c2, c3, num_block=6, groups=keep[19], kernel=(3,3), stride=(1,1), padding=(1,1))
+        c1 = [(keep[40], keep[41]), (keep[43], keep[44])]
+        c2 = [(keep[41], keep[42]), (keep[44], keep[45])]
+        c3 = [(keep[42], keep[43]), (keep[45], keep[46])]
+        self.conv_5 = ResidualSE(c1, c2, c3, num_block=2, groups=keep[40], kernel=(3,3), stride=(1,1), padding=(1,1))
+
+keep_dict = {
+    '1.8M': [32, 32, 103, 103, 64, 13, 13, 64, 26, 26,
+             64, 13, 13, 64, 52, 52, 64, 231, 231, 128,
+             154, 154, 128, 52, 52, 128, 26, 26, 128, 52,
+             52, 128, 26, 26, 128, 26, 26, 128, 308, 308,
+             128, 26, 26, 128, 26, 26, 128, 512, 512],
+    '1.8M_': [32, 32, 103, 103, 64, 13, 13, 64, 13, 13, 64, 13,
+              13, 64, 13, 13, 64, 231, 231, 128, 231, 231, 128, 52,
+              52, 128, 26, 26, 128, 77, 77, 128, 26, 26, 128, 26, 26,
+              128, 308, 308, 128, 26, 26, 128, 26, 26, 128, 512, 512],
+}
+MODEL_MAPPING = {
+    'MiniFASNetV1': lambda kw: MiniFASNet(keep_dict['1.8M'], **kw),
+    'MiniFASNetV2': lambda kw: MiniFASNet(keep_dict['1.8M_'], **kw),
+    'MiniFASNetV1SE': lambda kw: MiniFASNetSE(keep_dict['1.8M'], **kw),
+    'MiniFASNetV2SE': lambda kw: MiniFASNetSE(keep_dict['1.8M_'], **kw),
+}
+
+def _get_kernel(h, w):
+    return ((h + 15) // 16, (w + 15) // 16)
+
+def _parse_model_name(model_name):
+    info = model_name.split('_')[0:-1]
+    h_input, w_input = info[-1].split('x')
+    model_type = model_name.split('.pth')[0].split('_')[-1]
+    scale = None if info[0] == "org" else float(info[0])
+    return int(h_input), int(w_input), model_type, scale
+
+# ══════════════════════════════════════════════════════════════════════════
+# RetinaFace face detector
+# ══════════════════════════════════════════════════════════════════════════
+
+class RetinaFaceDetector:
+    def __init__(self, model_dir):
+        caffemodel = os.path.join(model_dir, "Widerface-RetinaFace.caffemodel")
+        deploy = os.path.join(model_dir, "deploy.prototxt")
+        if os.path.exists(caffemodel) and os.path.exists(deploy):
+            self.detector = cv2.dnn.readNetFromCaffe(deploy, caffemodel)
+        else:
+            self.detector = None
+            self._haar = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
+    def get_bbox(self, img):
+        if self.detector is not None:
+            return self._retinaface_bbox(img)
+        return self._haar_bbox(img)
+
+    def _retinaface_bbox(self, img):
+        height, width = img.shape[0], img.shape[1]
+        aspect_ratio = width / height
+        if img.shape[1] * img.shape[0] >= 192 * 192:
+            img_resized = cv2.resize(img,
+                (int(192 * math.sqrt(aspect_ratio)),
+                 int(192 / math.sqrt(aspect_ratio))), interpolation=cv2.INTER_LINEAR)
+        else:
+            img_resized = img
+        blob = cv2.dnn.blobFromImage(img_resized, 1, mean=(104, 117, 123))
+        self.detector.setInput(blob, 'data')
+        out = self.detector.forward('detection_out').squeeze()
+        max_conf_index = np.argmax(out[:, 2])
+        left = out[max_conf_index, 3] * width
+        top = out[max_conf_index, 4] * height
+        right = out[max_conf_index, 5] * width
+        bottom = out[max_conf_index, 6] * height
+        return [int(left), int(top), int(right - left + 1), int(bottom - top + 1)]
+
+    def _haar_bbox(self, img):
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = self._haar.detectMultiScale(gray, 1.3, 5, minSize=(50, 50))
+        if len(faces) == 0:
+            faces = self._haar.detectMultiScale(gray, 1.1, 3, minSize=(40, 40))
+        if len(faces) > 0:
+            x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+            return [int(x), int(y), int(w), int(h)]
+        h, w = img.shape[:2]
+        return [w // 4, h // 4, w // 2, h // 2]
+
+# ══════════════════════════════════════════════════════════════════════════
+# CropImage
+# ══════════════════════════════════════════════════════════════════════════
+
+class CropImage:
     @staticmethod
-    def _result(is_live, confidence, spoof_type, scores, failed=None):
+    def _get_new_box(src_w, src_h, bbox, scale):
+        x, y, box_w, box_h = bbox
+        scale = min((src_h - 1) / box_h, min((src_w - 1) / box_w, scale))
+        new_width = box_w * scale
+        new_height = box_h * scale
+        center_x, center_y = box_w / 2 + x, box_h / 2 + y
+        left_top_x = center_x - new_width / 2
+        left_top_y = center_y - new_height / 2
+        right_bottom_x = center_x + new_width / 2
+        right_bottom_y = center_y + new_height / 2
+        if left_top_x < 0:
+            right_bottom_x -= left_top_x
+            left_top_x = 0
+        if left_top_y < 0:
+            right_bottom_y -= left_top_y
+            left_top_y = 0
+        if right_bottom_x > src_w - 1:
+            left_top_x -= right_bottom_x - src_w + 1
+            right_bottom_x = src_w - 1
+        if right_bottom_y > src_h - 1:
+            left_top_y -= right_bottom_y - src_h + 1
+            right_bottom_y = src_h - 1
+        return (int(left_top_x), int(left_top_y), int(right_bottom_x), int(right_bottom_y))
+
+    def crop(self, org_img, bbox, scale, out_w, out_h, crop=True):
+        if not crop:
+            return cv2.resize(org_img, (out_w, out_h))
+        src_h, src_w, _ = np.shape(org_img)
+        ltx, lty, rbx, rby = self._get_new_box(src_w, src_h, bbox, scale)
+        img = org_img[lty:rby + 1, ltx:rbx + 1]
+        return cv2.resize(img, (out_w, out_h))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CNN Liveness Detector (singleton)
+# ══════════════════════════════════════════════════════════════════════════
+
+class CNNLivenessDetector:
+    def __init__(self, model_dir=None, device=None):
+        if model_dir is None:
+            model_dir = os.path.join(os.path.dirname(__file__), "anti_spoof_models")
+        self.model_dir = model_dir
+        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.face_detector = RetinaFaceDetector(model_dir)
+        self.image_cropper = CropImage()
+        self.models = []
+        self._load_models()
+
+    def _load_models(self):
+        for fname in os.listdir(self.model_dir):
+            if not fname.endswith(".pth"):
+                continue
+            h_input, w_input, model_type, scale = _parse_model_name(fname)
+            kernel = _get_kernel(h_input, w_input)
+            if model_type not in MODEL_MAPPING:
+                continue
+            model = MODEL_MAPPING[model_type]({
+                "embedding_size": 128, "conv6_kernel": kernel,
+                "num_classes": 3, "drop_p": 0.0,
+            })
+            state_dict = torch.load(os.path.join(self.model_dir, fname),
+                                     map_location=self.device, weights_only=True)
+            new_state_dict = OrderedDict()
+            for key, value in state_dict.items():
+                nk = key[7:] if key.startswith('module.') else key
+                nk = nk.replace('.se_fc1.', '.se_module.fc1.')
+                nk = nk.replace('.se_bn1.', '.se_module.bn1.')
+                nk = nk.replace('.se_fc2.', '.se_module.fc2.')
+                nk = nk.replace('.se_bn2.', '.se_module.bn2.')
+                new_state_dict[nk] = value
+            model.load_state_dict(new_state_dict, strict=False)
+            model.to(self.device)
+            model.eval()
+            self.models.append({"model": model, "h": h_input, "w": w_input, "scale": scale})
+
+    def check_liveness(self, frame, face_bbox=None):
+        if face_bbox is None:
+            face_bbox = self.face_detector.get_bbox(frame)
+
+        prediction = np.zeros((1, 3))
+        for m in self.models:
+            param = {
+                "org_img": frame, "bbox": face_bbox, "scale": m["scale"],
+                "out_w": m["w"], "out_h": m["h"], "crop": True,
+            }
+            if m["scale"] is None:
+                param["crop"] = False
+            img = self.image_cropper.crop(**param)
+            tensor = torch.from_numpy(img).float().permute(2, 0, 1).unsqueeze(0)
+            tensor = tensor.to(self.device)
+            with torch.no_grad():
+                out = m["model"](tensor)
+                prob = F.softmax(out, dim=1).cpu().numpy()
+            prediction += prob
+
+        real_score = float(prediction[0][1]) / 2.0
+        is_live = real_score > 0.5
+
         return {
             "is_live": is_live,
-            "confidence": confidence,
-            "spoof_type": spoof_type,
-            "scores": scores,
-            "failed": failed or [],
+            "confidence": round(real_score if is_live else (1.0 - real_score), 4),
+            "spoof_type": "none" if is_live else "cnn_detected",
+            "scores": {
+                "raw_spoof": float(prediction[0][0]),
+                "raw_real": float(prediction[0][1]),
+                "raw_unknown": float(prediction[0][2]),
+            },
         }
 
 
-detector = AntiSpoofingDetector()
+# ── Singleton ────────────────────────────────────────────────────────────
+
+_detector = None
+
+def get_detector(model_dir=None):
+    global _detector
+    if _detector is None:
+        _detector = CNNLivenessDetector(model_dir)
+    return _detector
 
 
-def check_liveness(face_bgr):
-    return detector.check_liveness(face_bgr)
+def check_liveness(frame, face_bbox=None):
+    """Check liveness of a face in the frame.
+
+    Args:
+        frame: BGR image (full frame from webcam/CCTV)
+        face_bbox: optional (x, y, w, h). If None, uses RetinaFace.
+
+    Returns:
+        dict with 'is_live', 'confidence', 'spoof_type', 'scores'
+    """
+    return get_detector().check_liveness(frame, face_bbox)

@@ -39,7 +39,7 @@ export default function AdminDashboard() {
       <PageHeader title="Admin Overview" />
 
       {error && <div className="alert alert-danger">{error}</div>}
-      {loading && <div className="page-loading">Loading...</div>}
+      {loading && <div className="page-loading">Loading....</div>}
 
       {overview && (
         <>
@@ -55,7 +55,7 @@ export default function AdminDashboard() {
           <div className="panel">
             <h2 className="panel-title">Today's Attendance</h2>
             {todayTotal === 0 ? (
-              <div className="empty-state">No attendance recorded yet today.</div>
+              <div className="empty-state">No attendance recorded today yet.</div>
             ) : (
               <div style={{ width: "100%", maxWidth: 360, height: 260 }}>
                 <ResponsiveContainer>

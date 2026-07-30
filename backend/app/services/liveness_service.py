@@ -1,9 +1,8 @@
 # app/services/liveness_service.py
 # CNN-based anti-spoofing using Silent-Face-Anti-Spoofing pretrained models.
-# Uses RetinaFace for face detection + MiniFASNetV2/V1SE for liveness classification.
+# Uses MiniFASNetV2/V1SE ensemble for liveness classification.
 
 import os
-import math
 import cv2
 import numpy as np
 import torch
@@ -223,55 +222,6 @@ def _parse_model_name(model_name):
     return int(h_input), int(w_input), model_type, scale
 
 # ══════════════════════════════════════════════════════════════════════════
-# RetinaFace face detector
-# ══════════════════════════════════════════════════════════════════════════
-
-class RetinaFaceDetector:
-    def __init__(self, model_dir):
-        caffemodel = os.path.join(model_dir, "Widerface-RetinaFace.caffemodel")
-        deploy = os.path.join(model_dir, "deploy.prototxt")
-        if os.path.exists(caffemodel) and os.path.exists(deploy):
-            self.detector = cv2.dnn.readNetFromCaffe(deploy, caffemodel)
-        else:
-            self.detector = None
-            self._haar = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-
-    def get_bbox(self, img):
-        if self.detector is not None:
-            return self._retinaface_bbox(img)
-        return self._haar_bbox(img)
-
-    def _retinaface_bbox(self, img):
-        height, width = img.shape[0], img.shape[1]
-        aspect_ratio = width / height
-        if img.shape[1] * img.shape[0] >= 192 * 192:
-            img_resized = cv2.resize(img,
-                (int(192 * math.sqrt(aspect_ratio)),
-                 int(192 / math.sqrt(aspect_ratio))), interpolation=cv2.INTER_LINEAR)
-        else:
-            img_resized = img
-        blob = cv2.dnn.blobFromImage(img_resized, 1, mean=(104, 117, 123))
-        self.detector.setInput(blob, 'data')
-        out = self.detector.forward('detection_out').squeeze()
-        max_conf_index = np.argmax(out[:, 2])
-        left = out[max_conf_index, 3] * width
-        top = out[max_conf_index, 4] * height
-        right = out[max_conf_index, 5] * width
-        bottom = out[max_conf_index, 6] * height
-        return [int(left), int(top), int(right - left + 1), int(bottom - top + 1)]
-
-    def _haar_bbox(self, img):
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        faces = self._haar.detectMultiScale(gray, 1.3, 5, minSize=(50, 50))
-        if len(faces) == 0:
-            faces = self._haar.detectMultiScale(gray, 1.1, 3, minSize=(40, 40))
-        if len(faces) > 0:
-            x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
-            return [int(x), int(y), int(w), int(h)]
-        h, w = img.shape[:2]
-        return [w // 4, h // 4, w // 2, h // 2]
-
-# ══════════════════════════════════════════════════════════════════════════
 # CropImage
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -320,7 +270,6 @@ class CNNLivenessDetector:
             model_dir = os.path.join(os.path.dirname(__file__), "anti_spoof_models")
         self.model_dir = model_dir
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.face_detector = RetinaFaceDetector(model_dir)
         self.image_cropper = CropImage()
         self.models = []
         self._load_models()
@@ -352,10 +301,7 @@ class CNNLivenessDetector:
             model.eval()
             self.models.append({"model": model, "h": h_input, "w": w_input, "scale": scale})
 
-    def check_liveness(self, frame, face_bbox=None):
-        if face_bbox is None:
-            face_bbox = self.face_detector.get_bbox(frame)
-
+    def check_liveness(self, frame, face_bbox):
         prediction = np.zeros((1, 3))
         for m in self.models:
             param = {
@@ -398,12 +344,12 @@ def get_detector(model_dir=None):
     return _detector
 
 
-def check_liveness(frame, face_bbox=None):
+def check_liveness(frame, face_bbox):
     """Check liveness of a face in the frame.
 
     Args:
         frame: BGR image (full frame from webcam/CCTV)
-        face_bbox: optional (x, y, w, h). If None, uses RetinaFace.
+        face_bbox: (x, y, w, h) as detected by YOLO
 
     Returns:
         dict with 'is_live', 'confidence', 'spoof_type', 'scores'

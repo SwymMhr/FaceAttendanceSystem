@@ -111,9 +111,6 @@ export default function AdminSchedule() {
       setForm(emptyForm);
       await fetchSlotsAndTimetable(selectedBatchId);
     } catch (err) {
-      // Conflict (409) or validation errors surface here, e.g. "This batch
-      // already has 'X' in that slot" or "This teacher is already
-      // teaching... which overlaps this slot".
       setError(err.response?.data?.detail || "Failed to assign period.");
     } finally {
       setSaving(false);
@@ -209,7 +206,7 @@ export default function AdminSchedule() {
                     <td>
                       <div>#{slot.period_number}</div>
                       <small className="text-muted d-block">
-                        {slot.start_time}–{slot.end_time}
+                        {slot.start_time}-{slot.end_time}
                       </small>
                       <button
                         className="btn btn-sm btn-link text-danger p-0"
@@ -255,7 +252,7 @@ export default function AdminSchedule() {
           {showForm && (
             <div className="panel" style={{ maxWidth: 640 }}>
                 <h2 className="panel-title">
-                  Assign period — {form.day_of_week[0] + form.day_of_week.slice(1).toLowerCase()}, slot #{form.period_number}
+                  Assign period - {form.day_of_week[0] + form.day_of_week.slice(1).toLowerCase()}, slot #{form.period_number}
                 </h2>
                 <form className="row g-2" onSubmit={handleCreate}>
                   <div className="col-md-6">
@@ -268,7 +265,7 @@ export default function AdminSchedule() {
                       <option value="">Select subject...</option>
                       {subjects.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.subject_code} — {s.subject_name}
+                          {s.subject_code} - {s.subject_name}
                         </option>
                       ))}
                     </select>

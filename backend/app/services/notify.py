@@ -15,7 +15,7 @@ def send_absence_email(to_email: str, student_name: str, subject_name: str, on_d
         f"Hi {student_name},\n\n"
         f"You were marked absent for {subject_name} on {on_date.isoformat()}.\n"
         f"If you believe this is a mistake, please contact your instructor.\n\n"
-        f"— Attendance System"
+        f"- Attendance System"
     )
 
     msg = MIMEText(body)

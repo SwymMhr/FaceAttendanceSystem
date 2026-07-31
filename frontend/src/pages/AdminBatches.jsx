@@ -92,7 +92,7 @@ export default function AdminBatches() {
           <input
             className="form-control"
             type="text"
-            placeholder="e.g. 2024 Software"
+            placeholder="Batch Name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             required

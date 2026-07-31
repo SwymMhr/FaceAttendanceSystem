@@ -74,7 +74,7 @@ export default function PeriodAttendancePage() {
       if (result.newly_marked_absent?.length) {
         parts.push(`Marked absent: ${result.newly_marked_absent.join(", ")}`);
       }
-      setFinalizeMessage(parts.length ? parts.join(" · ") : "Nothing left to finalize — everyone already has a record.");
+      setFinalizeMessage(parts.length ? parts.join(" · ") : "Nothing left to finalize, everyone already has a record.");
       await fetchRoster();
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to finalize this period.");

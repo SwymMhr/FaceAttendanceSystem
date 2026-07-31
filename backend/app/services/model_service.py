@@ -65,7 +65,7 @@ def _load_checkpoint():
 _model, _checkpoint = _load_checkpoint()    # module-level singletons
 
 IMG_SIZE = _checkpoint["img_size"]
-VERIFICATION_THRESHOLD = float(_checkpoint["verification_threshold"])
+VERIFICATION_THRESHOLD = 0.6
 _NORMALIZE_MEAN = _checkpoint["normalize_mean"]
 _NORMALIZE_STD = _checkpoint["normalize_std"]
 

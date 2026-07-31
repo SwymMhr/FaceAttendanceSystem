@@ -128,7 +128,7 @@ export default function RegisterFacePage() {
               // value is Student.id (student_db_id), not the login-account id —
               // that's what the face-registration endpoints actually key off.
               <option key={s.id} value={s.student_db_id}>
-                {s.student_code} — {s.student_name}
+                {s.student_code} - {s.student_name}
               </option>
             ))}
           </select>

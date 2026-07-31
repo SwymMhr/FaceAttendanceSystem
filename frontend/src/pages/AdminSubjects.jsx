@@ -98,7 +98,7 @@ export default function AdminSubjects() {
             className="form-control"
             style={{ maxWidth: 140 }}
             type="text"
-            placeholder="Code (CE101)"
+            placeholder="Code"
             value={newCode}
             onChange={(e) => setNewCode(e.target.value)}
             required

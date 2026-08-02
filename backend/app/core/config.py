@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     DATABASE_URL: str
-    MODEL_PATH: str = "model/face_embedding_model_mobilenetv2_v6_arcface.pth"
+    MODEL_PATH: str = "model/face_embedding_model_v7_mobilenet_v2_bs96_lr0.015_m0.35.pth"
     UPLOAD_DIR: str = "uploads"
 
     # ── Auth settings ──────────────────────────────────────────────────────

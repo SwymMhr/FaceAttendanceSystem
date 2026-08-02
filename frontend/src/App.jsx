@@ -18,6 +18,7 @@ import AddTeacherPage from "./pages/AddTeacherPage";
 import EditUserPage from "./pages/EditUserPage";
 import AdminSchedule from "./pages/AdminSchedule";
 import AddPeriodSlotPage from "./pages/AddPeriodSlotPage";
+import CCTVPage from "./pages/CCTVPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
@@ -148,6 +149,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={["teacher", "admin"]}>
               <PeriodAttendancePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/cctv"
+          element={
+            <ProtectedRoute roles={["teacher", "admin"]}>
+              <CCTVPage />
             </ProtectedRoute>
           }
         />

@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.services.scheduler import start_scheduler
-from app.api import enroll, attendance, realtime, auth, admin, schedule, dashboard
+from app.api import enroll, attendance, realtime, auth, admin, schedule, dashboard, cctv
+from app.services.cctv_service import cctv_service
 from app.db.database import Base, engine
 
 # ── Create all tables in PostgreSQL on startup ────────────────────────────────
@@ -21,6 +22,7 @@ app = FastAPI(
     version     = "1.0.0",
 )
 start_scheduler()
+cctv_service.start()
 
 # ── CORS — allow your React frontend to call this backend ─────────────────────
 # React dev server runs on http://localhost:5173 (Vite default).
@@ -40,6 +42,7 @@ app.include_router(attendance.router, tags=["Attendance"])
 app.include_router(realtime.router, tags=["Realtime"])
 app.include_router(admin.router)
 app.include_router(schedule.router)
+app.include_router(cctv.router, tags=["CCTV"])
 
 app.include_router(dashboard.student_router, tags=["Student Dashboard"])
 app.include_router(dashboard.teacher_router, tags=["Teacher Dashboard"])

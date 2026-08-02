@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     LIVENESS_ENABLED: bool = True
     LIVENESS_MIN_CHECKS_TO_FAIL: int = 2
 
+    # ── CCTV integration ─────────────────────────────────────────────────
+    CCTV_ENABLED: bool = False
+    CCTV_RTSP_URL: str = ""
+    CCTV_STREAM_FALLBACKS: str = ""
+    CCTV_BATCH_ID: int | None = None
+    CCTV_STREAM_FPS: float = 15.0
+    CCTV_CAPTURE_MIN_INTERVAL: float = 1.0
+    CCTV_CAPTURE_MAX_INTERVAL: float = 5.0
+
     class Config:
         # Tell pydantic-settings to read from your .env file
         env_file = ".env"

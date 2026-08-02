@@ -14,6 +14,7 @@ const NAV_BY_ROLE = {
   teacher: [
     { label: "Dashboard", path: "/teacher", icon: "bi-speedometer2", end: true },
     { label: "Live Attendance", path: "/teacher/attendance", icon: "bi-person-video2" },
+    { label: "CCTV Live", path: "/teacher/cctv", icon: "bi-camera-video" },
     { label: "History", path: "/teacher/history", icon: "bi-clock-history" },
   ],
   admin: [
@@ -24,6 +25,7 @@ const NAV_BY_ROLE = {
     { label: "Schedule", path: "/admin/schedule", icon: "bi-calendar-week" },
     { label: "Register Faces", path: "/teacher/enroll", icon: "bi-camera" },
     { label: "Live Attendance", path: "/teacher/attendance", icon: "bi-person-video2" },
+    { label: "CCTV Live", path: "/teacher/cctv", icon: "bi-camera-video" },
     { label: "History", path: "/teacher/history", icon: "bi-clock-history" },
   ],
 };

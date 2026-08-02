@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     DATABASE_URL: str
-    MODEL_PATH: str = "model/face_embedding_model_mobilenetv2_v6_arcface.pth"
+    MODEL_PATH: str = "model/face_embedding_model_v7_mobilenet_v2_bs96_lr0.015_m0.35.pth"
     UPLOAD_DIR: str = "uploads"
 
     # ── Auth settings ──────────────────────────────────────────────────────
@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     # ── Liveness detection ────────────────────────────────────────────────
     LIVENESS_ENABLED: bool = True
     LIVENESS_MIN_CHECKS_TO_FAIL: int = 2
+
+    # ── CCTV integration ─────────────────────────────────────────────────
+    CCTV_ENABLED: bool = False
+    CCTV_RTSP_URL: str = ""
+    CCTV_STREAM_FALLBACKS: str = ""
+    CCTV_BATCH_ID: int | None = None
+    CCTV_STREAM_FPS: float = 15.0
+    CCTV_CAPTURE_MIN_INTERVAL: float = 1.0
+    CCTV_CAPTURE_MAX_INTERVAL: float = 5.0
 
     class Config:
         # Tell pydantic-settings to read from your .env file

@@ -295,4 +295,26 @@ export async function deletePeriod(periodId) {
   return res.data;
 }
 
+// ── CCTV integration ────────────────────────────────────────────────────────
+
+export async function getCctvStatus() {
+  const res = await api.get("/cctv/status");
+  return res.data;
+}
+
+export async function getCctvEvents(limit = 50) {
+  const res = await api.get(`/cctv/events?limit=${limit}`);
+  return res.data;
+}
+
+export async function toggleCctv() {
+  const res = await api.post("/cctv/toggle");
+  return res.data;
+}
+
+export async function updateCctvSettings(payload) {
+  const res = await api.post("/cctv/settings", payload);
+  return res.data;
+}
+
 export default api;
